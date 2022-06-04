@@ -11,7 +11,17 @@ from .utils import clear_tmp
 
 @clear_tmp
 def test_simulation_load_export():
+
     path = "tests/tmp/simulation.json"
+    SIM.to_file(path)
+    SIM2 = Simulation.from_file(path)
+    assert SIM == SIM2, "original and loaded simulations are not the same"
+
+
+@clear_tmp
+def test_simulation_load_export_yaml():
+
+    path = "tests/tmp/simulation.yaml"
     SIM.to_file(path)
     SIM2 = Simulation.from_file(path)
     assert SIM == SIM2, "original and loaded simulations are not the same"
@@ -24,7 +34,6 @@ def test_simulation_preserve_types():
 
     sim_all = Simulation(
         size=(10.0, 10.0, 10.0),
-        grid_size=(1, 1, 1),
         structures=[
             Structure(geometry=Box(size=(1, 1, 1)), medium=Medium()),
             Structure(geometry=Sphere(radius=1), medium=PoleResidue(eps_inf=1, poles=[])),
@@ -39,7 +48,7 @@ def test_simulation_preserve_types():
             Structure(geometry=Sphere(radius=1), medium=Debye(eps_inf=1.0, coeffs=[]), name="t2"),
         ],
         sources=[
-            VolumeSource(size=(0, 0, 0), source_time=st, polarization="Ex"),
+            UniformCurrentSource(size=(0, 0, 0), source_time=st, polarization="Ex"),
             PlaneWave(
                 center=(0, 0, -4),
                 size=(inf, inf, 0),
@@ -48,6 +57,7 @@ def test_simulation_preserve_types():
                 pol_angle=2.0,
             ),
             GaussianBeam(
+                center=(0, 0, -4),
                 size=(1, 1, 0),
                 source_time=st,
                 direction="+",
@@ -78,7 +88,7 @@ def test_simulation_preserve_types():
         assert G in G_types
 
     S_types = [type(s) for s in sim_2.sources]
-    for S in (VolumeSource, PlaneWave, GaussianBeam):
+    for S in (UniformCurrentSource, PlaneWave, GaussianBeam):
         assert S in S_types
 
     M_types = [type(m) for m in sim_2.monitors]

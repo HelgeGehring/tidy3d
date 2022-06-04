@@ -72,7 +72,7 @@ def run(  # pylint:disable=too-many-arguments
     return load(task_id=task_id, path=path, normalize_index=normalize_index)
 
 
-def upload(
+def upload(  # pylint:disable=too-many-locals,too-many-arguments
     simulation: Simulation, task_name: str, folder_name: str = "default", callback_url: str = None
 ) -> TaskId:
     """Upload simulation to server, but do not start running :class:`.Simulation`.
@@ -99,15 +99,41 @@ def upload(
     To start the simulation running, must call :meth:`start` after uploaded.
     """
 
-    task_id = _upload_task(
-        simulation=simulation,
-        task_name=task_name,
-        folder_name=folder_name,
-        callback_url=callback_url,
-    )
+    simulation.validate_pre_upload()
 
+    json_string = simulation._json_string()  # pylint:disable=protected-access
+    data = {
+        "taskName": task_name,
+        "callbackUrl": callback_url,
+    }
+    folder = _query_or_create_folder(folder_name)
+    method = f"tidy3d/projects/{folder.projectId}/tasks"
+
+    log.debug("Creating task.")
+    try:
+        task = http.post(method=method, data=data)
+        task_id = task["taskId"]
+    except requests.exceptions.HTTPError as e:
+        error_json = json.loads(e.response.text)
+        raise WebError(error_json["error"]) from e
     # log the task_id so users can copy and paste it from STDOUT / file if the need it later.
     log.info(f"Uploaded task '{task_name}' with task_id '{task_id}'.")
+
+    # upload the file to s3
+    log.debug("Uploading the json file")
+    client, bucket, user_id = get_s3_user()
+    key = f"users/{user_id}/{task_id}/simulation.json"
+    log.debug(f"json = {json_string}")
+    resp = client.put_object(
+        Body=json_string,
+        Bucket=bucket,
+        Key=key,
+    )
+    if resp.get("ResponseMetadata") and resp.get("ResponseMetadata").get("HTTPStatusCode") != 200:
+        raise WebError("Upload file to 3S failed, please check your network or try it later.")
+
+    # log the url for the task in the web UI
+    log.debug(f"{DEFAULT_CONFIG.website_endpoint}/folders/{folder.projectId}/tasks/{task_id}")
 
     return task_id
 
@@ -209,32 +235,49 @@ def monitor(task_id: TaskId) -> None:
 
     break_statuses = ("success", "error", "diverged", "deleted", "draft")
 
-    def get_status():
-        """Get status for this task (called many times below, so put into function)."""
-        status = get_info(task_id).status
+    show_cost = True
+
+    def get_status(show_cost=False):
+        """Get status for this task (called many times below, so put into function).
+        If the estimated cost is available, it is displayed if requested."""
+        task_info = get_info(task_id)
+        status = task_info.status
         if status == "visualize":
             return "success"
-        return status
+        if status == "error":
+            raise WebError("Error running task!")
+
+        # log the maximum flex unit cost
+        est_flex_unit = task_info.estFlexUnit
+        if show_cost is True and est_flex_unit is not None and est_flex_unit > 0:
+            log.info(f"Maximum flex unit cost: {est_flex_unit:1.2f}")
+            # Set show_cost to False so that it is only shown once during the run
+            show_cost = False
+
+        return status, show_cost
 
     console = Console()
 
+    status, show_cost = get_status(show_cost=show_cost)
+    log.info(f"status = {status}")
     # already done
-    if get_status() in break_statuses:
-        log.info(f"status = {get_status()}")
+    if status in break_statuses:
         return
 
     # preprocessing
     with console.status(f"[bold green]Starting '{task_name}'...", spinner="runner"):
-        while get_status() not in break_statuses and get_status() != "running":
-            if status != get_status():
-                status = get_status()
+        while status not in break_statuses and status != "running":
+            new_status, show_cost = get_status(show_cost=show_cost)
+            if new_status != status:
+                status = new_status
                 if status != "running":
                     log.info(f"status = {status}")
             time.sleep(REFRESH_TIME)
 
     # startup phase where run info is not available
     log.info("starting up solver")
-    while get_run_info(task_id)[0] is None and get_status() == "running":
+    while get_run_info(task_id)[0] is None and status == "running":
+        status, show_cost = get_status(show_cost=show_cost)
         time.sleep(REFRESH_TIME)
 
     # phase where run % info is available
@@ -242,27 +285,27 @@ def monitor(task_id: TaskId) -> None:
     with Progress(console=console) as progress:
         pbar_pd = progress.add_task("% done", total=100)
         perc_done, _ = get_run_info(task_id)
-        while perc_done is not None and perc_done < 100 and get_status() == "running":
+        while perc_done is not None and perc_done < 100 and status == "running":
+            status, show_cost = get_status(show_cost=show_cost)
             perc_done, field_decay = get_run_info(task_id)
             new_description = f"% done (field decay = {field_decay:.2e})"
             progress.update(pbar_pd, completed=perc_done, description=new_description)
             time.sleep(1.0)
-        if perc_done < 100:
+        if perc_done is not None and perc_done < 100:
             log.info("early shutoff detected, exiting.")
         else:
             progress.update(pbar_pd, completed=100)
 
     # postprocessing
+    if status != "running":
+        log.info(f"status = {status}")
     with console.status(f"[bold green]Finishing '{task_name}'...", spinner="runner"):
-        while get_status() not in break_statuses:
-            if status != get_status():
-                status = get_status()
+        while status not in break_statuses:
+            new_status, show_cost = get_status(show_cost=show_cost)
+            if new_status != status:
+                status = new_status
                 log.info(f"status = {status}")
             time.sleep(REFRESH_TIME)
-
-    # final status (if diffrent from the last printed status)
-    if status != get_status():
-        log.info(f"status = {get_status()}")
 
 
 def download(task_id: TaskId, path: str = "simulation_data.hdf5") -> None:
@@ -282,7 +325,7 @@ def download(task_id: TaskId, path: str = "simulation_data.hdf5") -> None:
 
     # TODO: it should be possible to load "diverged" simulations
     task_info = get_info(task_id)
-    if task_info.status in ("error", "deleted", "draft"):
+    if task_info.status in ("error", "deleted"):
         raise WebError(f"can't download task '{task_id}', status = '{task_info.status}'")
 
     directory, _ = os.path.split(path)
@@ -436,20 +479,12 @@ def get_tasks(
     return out_dict
 
 
-def get_metadata(task_id: TaskId) -> Dict:
-    """Get metadata for a task.
-
-    Parameters
-    ----------
-    task_id : str
-        Unique identifier of task on server.  Returned by :meth:`upload`.
-
-    Returns
-    -------
-    Dict
-        Dictionary with metadata about the task.
+def estimate_cost(task_id: str) -> float:
+    """Compute the maximum flex unit charge for a given task, assuming the simulation runs for
+    the full ``run_time``. If early shut-off is triggered, the cost is adjusted proporionately.
     """
 
+    method = f"tidy3d/tasks/{task_id}/metadata"
     data = {}
 
     # do not pass protocol version if mapping is missing or needs an override.
@@ -458,74 +493,33 @@ def get_metadata(task_id: TaskId) -> Dict:
     else:
         data["protocolVersion"] = __version__
 
-    method = f"tidy3d/tasks/{str(task_id)}/metadata"
-    return http.post(method, data)
+    try:
+        resp = http.post(method, data=data)
+    except Exception:  # pylint:disable=broad-except
+        log.warning(
+            "Could not get estimated cost! It will be reported in preprocessing upon "
+            "simulation run."
+        )
+        return None
+
+    return resp.get("flex_unit")
 
 
 def _query_or_create_folder(folder_name) -> Folder:
     log.debug("query folder")
     method = f"tidy3d/project?projectName={folder_name}"
-    resp = http.get(method)
-    if not resp:
-        log.debug("folder not found, create one.")
-        method = "tidy3d/projects"
-        resp = http.post(method, data={"projectName": folder_name})
 
-    return Folder(**resp)
-
-
-def _upload_task(  # pylint:disable=too-many-locals,too-many-arguments
-    simulation: Simulation,
-    task_name: str,
-    folder_name: str = "default",
-    callback_url: str = None,
-) -> TaskId:
-    """upload with all kwargs exposed"""
-
-    simulation.validate_pre_upload()
-
-    json_string = simulation._json_string()  # pylint:disable=protected-access
-    data = {
-        "taskName": task_name,
-        "callbackUrl": callback_url,
-    }
-
-    folder = _query_or_create_folder(folder_name)
-    method = f"tidy3d/projects/{folder.projectId}/tasks"
-
-    log.debug("Creating task.")
     try:
-        task = http.post(method=method, data=data)
-        task_id = task["taskId"]
-    except requests.exceptions.HTTPError as e:
-        error_json = json.loads(e.response.text)
-        raise WebError(error_json["error"]) from e
+        resp = http.get(method)
+        if resp is None:
+            log.debug("folder not found, create one.")
+            method = "tidy3d/projects"
+            resp = http.post(method, data={"projectName": folder_name})
+        folder = Folder(**resp)
+    except Exception as e:  # pylint:disable=broad-except
+        raise WebError("Could not create task folder") from e
 
-    # upload the file to s3
-    log.debug("Uploading the json file")
-
-    client, bucket, user_id = get_s3_user()
-
-    key = f"users/{user_id}/{task_id}/simulation.json"
-
-    # size_bytes = len(json_string.encode('utf-8'))
-    # TODO: add progressbar, with put_object, no callback, so no real need.
-    # with Progress() as progress:
-    # upload_progress = UploadProgress(size_bytes, progress)
-    log.debug(f"json = {json_string}")
-    resp = client.put_object(
-        Body=json_string,
-        Bucket=bucket,
-        Key=key,
-        # Callback=upload_progress.report
-    )
-
-    if resp.get("ResponseMetadata") and resp.get("ResponseMetadata").get("HTTPStatusCode") != 200:
-        raise WebError("Upload file to 3S failed, please check your network or try it later.")
-
-    log.info(f"{DEFAULT_CONFIG.website_endpoint}/folders/{folder.projectId}/tasks/{task_id}")
-
-    return task_id
+    return folder
 
 
 def _download_file(task_id: TaskId, fname: str, path: str) -> None:

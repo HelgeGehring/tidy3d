@@ -5,6 +5,7 @@ import pydantic
 
 from tidy3d import *
 from tidy3d.log import ValidationError, SetupError
+from tidy3d.components.simulation import MAX_NUM_MEDIUMS
 from .utils import assert_log_level
 
 
@@ -13,7 +14,6 @@ def test_sim():
 
     sim = Simulation(
         size=(2.0, 2.0, 2.0),
-        grid_size=(0.01, 0.01, 0.01),
         run_time=1e-12,
         structures=[
             Structure(
@@ -31,7 +31,7 @@ def test_sim():
             ),
         ],
         sources=[
-            VolumeSource(
+            UniformCurrentSource(
                 size=(0, 0, 0),
                 center=(0, -0.5, 0),
                 polarization="Hx",
@@ -40,13 +40,21 @@ def test_sim():
                     fwidth=1e12,
                 ),
                 name="my_dipole",
-            )
+            ),
+            PointDipole(
+                center=(0, 0, 0),
+                polarization="Ex",
+                source_time=GaussianPulse(
+                    freq0=1e14,
+                    fwidth=1e12,
+                ),
+            ),
         ],
         monitors=[
             FieldMonitor(size=(0, 0, 0), center=(0, 0, 0), freqs=[1, 2], name="point"),
             FluxTimeMonitor(size=(1, 1, 0), center=(0, 0, 0), interval=10, name="plane"),
         ],
-        symmetry=(0, 0, 0),
+        symmetry=(0, 1, -1),
         pml_layers=(
             PML(num_layers=20),
             StablePML(num_layers=30),
@@ -57,13 +65,29 @@ def test_sim():
         subpixel=False,
     )
 
+    dt = sim.dt
+    tm = sim.tmesh
+    sim.validate_pre_upload()
+    ms = sim.mediums
+    mm = sim.medium_map
+    m = sim.get_monitor_by_name("point")
+    s = sim.background_structure
+    sim.plot(x=0)
+    sim.plot_eps(x=0)
+    sim.num_pml_layers
+    sim.plot_grid(x=0)
+    sim.frequency_range
+    sim.grid
+    sim.num_cells
+    sim.discretize(m)
+    sim.epsilon(m)
+
 
 def _test_version():
     """ensure there's a version in simulation"""
 
     sim = Simulation(
         size=(1, 1, 1),
-        grid_size=(0.1, 0.1, 0.1),
         run_time=1e-12,
     )
     path = "tests/tmp/simulation.json"
@@ -86,7 +110,7 @@ def test_sim_bounds():
         sim = Simulation(
             size=(1, 1, 1),
             center=CENTER_SHIFT,
-            grid_size=(0.1, 0.1, 0.1),
+            grid_spec=GridSpec(wavelength=1.0),
             run_time=1e-12,
             structures=[
                 Structure(geometry=Box(size=(1, 1, 1), center=shifted_center), medium=Medium())
@@ -115,20 +139,17 @@ def test_sim_bounds():
                 place_box(tuple(center))
 
 
-def test_sim_grid_size():
+def test_sim_size():
 
-    size = (1, 1, 1)
-    _ = Simulation(size=size, grid_size=(1.0, 1.0, 1.0), run_time=1e-12)
-
-
-def _test_sim_size():
+    mesh1d = UniformGrid(dl=1e-5)
+    grid_spec = GridSpec(grid_x=mesh1d, grid_y=mesh1d, grid_z=mesh1d)
 
     with pytest.raises(SetupError):
-        s = Simulation(size=(1, 1, 1), grid_size=(1e-5, 1e-5, 1e-5), run_time=1e-12)
+        s = Simulation(size=(1, 1, 1), grid_spec=grid_spec, run_time=1e-12)
         s._validate_size()
 
     with pytest.raises(SetupError):
-        s = Simulation(size=(1, 1, 1), grid_size=(0.1, 0.1, 0.1), run_time=1e-7)
+        s = Simulation(size=(1, 1, 1), run_time=1e-7)
         s._validate_size()
 
 
@@ -137,16 +158,13 @@ def _test_monitor_size():
     with pytest.raises(SetupError):
         s = Simulation(
             size=(1, 1, 1),
-            grid_size=(1e-3, 1e-3, 1e-3),
+            grid_spec=GridSpec.uniform(1e-3),
             monitors=[
-                FieldMonitor(
-                    size=(inf, inf, inf), freqs=np.linspace(0, 200e12, 10000001), name="test"
-                )
+                FieldMonitor(size=(inf, inf, inf), freqs=np.linspace(0, 200e12, 10001), name="test")
             ],
             run_time=1e-12,
         )
-
-        s.validate_contents()
+        s.validate_pre_upload()
 
 
 @pytest.mark.parametrize("freq, log_level", [(1.5, 30), (2.5, None), (3.5, 30)])
@@ -157,14 +175,13 @@ def test_monitor_medium_frequency_range(caplog, freq, log_level):
     medium = Medium(frequency_range=(2, 3))
     box = Structure(geometry=Box(size=(0.1, 0.1, 0.1)), medium=medium)
     mnt = FieldMonitor(size=(0, 0, 0), name="freq", freqs=[freq])
-    src = VolumeSource(
+    src = UniformCurrentSource(
         source_time=GaussianPulse(freq0=2.5, fwidth=0.5),
         size=(0, 0, 0),
         polarization="Ex",
     )
     sim = Simulation(
         size=(1, 1, 1),
-        grid_size=(0.1, 0.1, 0.1),
         structures=[box],
         monitors=[mnt],
         sources=[src],
@@ -178,32 +195,29 @@ def test_monitor_simulation_frequency_range(caplog, fwidth, log_level):
     # monitor frequency outside of the simulation's frequency range should throw a warning
 
     size = (1, 1, 1)
-    src = VolumeSource(
+    src = UniformCurrentSource(
         source_time=GaussianPulse(freq0=2.0, fwidth=fwidth),
         size=(0, 0, 0),
         polarization="Ex",
     )
     mnt = FieldMonitor(size=(0, 0, 0), name="freq", freqs=[1.5])
-    sim = Simulation(
-        size=(1, 1, 1), grid_size=(0.1, 0.1, 0.1), monitors=[mnt], sources=[src], run_time=1e-12
-    )
+    sim = Simulation(size=(1, 1, 1), monitors=[mnt], sources=[src], run_time=1e-12)
     assert_log_level(caplog, log_level)
 
 
 @pytest.mark.parametrize("grid_size,log_level", [(0.001, None), (3, 30)])
-def test_sim_grid_size(caplog, grid_size, log_level):
+def test_large_grid_size(caplog, grid_size, log_level):
     # small fwidth should be inside range, large one should throw warning
 
     medium = Medium(permittivity=2, frequency_range=(2e14, 3e14))
     box = Structure(geometry=Box(size=(0.1, 0.1, 0.1)), medium=medium)
-    src = VolumeSource(
+    src = PointDipole(
         source_time=GaussianPulse(freq0=2.5e14, fwidth=1e12),
-        size=(0, 0, 0),
         polarization="Ex",
     )
     _ = Simulation(
         size=(1, 1, 1),
-        grid_size=(0.01, 0.01, grid_size),
+        grid_spec=GridSpec.uniform(dl=grid_size),
         structures=[box],
         sources=[src],
         run_time=1e-12,
@@ -217,14 +231,13 @@ def test_sim_structure_gap(caplog, box_size, log_level):
     """Make sure the gap between a structure and PML is not too small compared to lambda0."""
     medium = Medium(permittivity=2)
     box = Structure(geometry=Box(size=(box_size, box_size, box_size)), medium=medium)
-    src = VolumeSource(
+    src = UniformCurrentSource(
         source_time=GaussianPulse(freq0=3e14, fwidth=1e13),
         size=(0, 0, 0),
         polarization="Ex",
     )
     sim = Simulation(
         size=(10, 10, 10),
-        grid_size=(0.1, 0.1, 0.1),
         structures=[box],
         sources=[src],
         pml_layers=[PML(num_layers=5), PML(num_layers=5), PML(num_layers=5)],
@@ -254,7 +267,6 @@ def test_sim_plane_wave_error():
     # with transparent box continue
     _ = Simulation(
         size=(1, 1, 1),
-        grid_size=(0.1, 0.1, 0.1),
         medium=medium_bg,
         structures=[box_transparent],
         sources=[src],
@@ -265,7 +277,6 @@ def test_sim_plane_wave_error():
     with pytest.raises(SetupError):
         _ = Simulation(
             size=(1, 1, 1),
-            grid_size=(0.1, 0.1, 0.1),
             medium=medium_bg,
             structures=[box_transparent, box],
             sources=[src],
@@ -279,15 +290,13 @@ def test_sim_plane_wave_error():
 def test_sim_structure_extent(caplog, box_size, log_level):
     """Make sure we warn if structure extends exactly to simulation edges."""
 
-    src = VolumeSource(
+    src = UniformCurrentSource(
         source_time=GaussianPulse(freq0=3e14, fwidth=1e13),
         size=(0, 0, 0),
         polarization="Ex",
     )
     box = Structure(geometry=Box(size=box_size), medium=Medium(permittivity=2))
-    sim = Simulation(
-        size=(1, 1, 1), grid_size=(0.1, 0.1, 0.1), structures=[box], sources=[src], run_time=1e-12
-    )
+    sim = Simulation(size=(1, 1, 1), structures=[box], sources=[src], run_time=1e-12)
 
     assert_log_level(caplog, log_level)
 
@@ -296,21 +305,18 @@ def test_num_mediums():
     """Make sure we error if too many mediums supplied."""
 
     structures = []
-    for i in range(200):
+    grid_spec = GridSpec.auto(wavelength=1.0)
+    for i in range(MAX_NUM_MEDIUMS):
         structures.append(
             Structure(geometry=Box(size=(1, 1, 1)), medium=Medium(permittivity=i + 1))
         )
-    sim = Simulation(
-        size=(1, 1, 1), grid_size=(0.1, 0.1, 0.1), structures=structures, run_time=1e-12
-    )
+    sim = Simulation(size=(5, 5, 5), grid_spec=grid_spec, structures=structures, run_time=1e-12)
 
     with pytest.raises(SetupError):
         structures.append(
             Structure(geometry=Box(size=(1, 1, 1)), medium=Medium(permittivity=i + 2))
         )
-        sim = Simulation(
-            size=(1, 1, 1), grid_size=(0.1, 0.1, 0.1), structures=structures, run_time=1e-12
-        )
+        sim = Simulation(size=(5, 5, 5), grid_spec=grid_spec, structures=structures, run_time=1e-12)
 
 
 """ geometry """
@@ -351,13 +357,11 @@ def test_geometry_sizes():
         with pytest.raises(pydantic.ValidationError) as e_info:
             a = Box(size=size, center=(0, 0, 0))
         with pytest.raises(pydantic.ValidationError) as e_info:
-            s = Simulation(size=size, grid_size=(1.0, 1.0, 1.0), run_time=1e-12)
-        with pytest.raises(pydantic.ValidationError) as e_info:
-            s = Simulation(size=(1, 1, 1), grid_size=size, run_time=1e-12)
+            s = Simulation(size=size, run_time=1e-12, grid_spec=GridSpec(wavelength=1.0))
 
     # negative grid sizes error?
     with pytest.raises(pydantic.ValidationError) as e_info:
-        s = Simulation(size=(1, 1, 1), grid_size=-1.0, run_time=1e-12)
+        s = Simulation(size=(1, 1, 1), grid_spec=GridSpec.uniform(dl=-1.0), run_time=1e-12)
 
 
 def test_pop_axis():
@@ -569,7 +573,6 @@ def _test_names_default():
 
     sim = Simulation(
         size=(2.0, 2.0, 2.0),
-        grid_size=(0.01, 0.01, 0.01),
         run_time=1e-12,
         structures=[
             Structure(
@@ -587,19 +590,19 @@ def _test_names_default():
             ),
         ],
         sources=[
-            VolumeSource(
+            UniformCurrentSource(
                 size=(0, 0, 0),
                 center=(0, -0.5, 0),
                 polarization="Hx",
                 source_time=GaussianPulse(freq0=1e14, fwidth=1e12),
             ),
-            VolumeSource(
+            UniformCurrentSource(
                 size=(0, 0, 0),
                 center=(0, -0.5, 0),
                 polarization="Ex",
                 source_time=GaussianPulse(freq0=1e14, fwidth=1e12),
             ),
-            VolumeSource(
+            UniformCurrentSource(
                 size=(0, 0, 0),
                 center=(0, -0.5, 0),
                 polarization="Ey",
@@ -625,7 +628,6 @@ def test_names_unique():
     with pytest.raises(SetupError) as e:
         sim = Simulation(
             size=(2.0, 2.0, 2.0),
-            grid_size=(0.01, 0.01, 0.01),
             run_time=1e-12,
             structures=[
                 Structure(
@@ -644,17 +646,16 @@ def test_names_unique():
     with pytest.raises(SetupError) as e:
         sim = Simulation(
             size=(2.0, 2.0, 2.0),
-            grid_size=(0.01, 0.01, 0.01),
             run_time=1e-12,
             sources=[
-                VolumeSource(
+                UniformCurrentSource(
                     size=(0, 0, 0),
                     center=(0, -0.5, 0),
                     polarization="Hx",
                     source_time=GaussianPulse(freq0=1e14, fwidth=1e12),
                     name="source1",
                 ),
-                VolumeSource(
+                UniformCurrentSource(
                     size=(0, 0, 0),
                     center=(0, -0.5, 0),
                     polarization="Ex",
@@ -667,7 +668,6 @@ def test_names_unique():
     with pytest.raises(SetupError) as e:
         sim = Simulation(
             size=(2.0, 2.0, 2.0),
-            grid_size=(0.01, 0.01, 0.01),
             run_time=1e-12,
             monitors=[
                 FluxMonitor(size=(1, 1, 0), center=(0, -0.5, 0), freqs=[1], name="mon1"),
@@ -676,15 +676,15 @@ def test_names_unique():
         )
 
 
-""" VolumeSources """
+""" UniformCurrentSources """
 
 
-def test_VolumeSource():
+def test_UniformCurrentSource():
 
     g = GaussianPulse(freq0=1, fwidth=0.1)
 
-    # test we can make generic VolumeSource
-    s = VolumeSource(size=(1, 1, 1), source_time=g, polarization="Ez")
+    # test we can make generic UniformCurrentSource
+    s = UniformCurrentSource(size=(1, 1, 1), source_time=g, polarization="Ez")
 
 
 def test_source_times():
@@ -693,11 +693,24 @@ def test_source_times():
     g = GaussianPulse(freq0=1, fwidth=0.1)
     ts = np.linspace(0, 30, 1001)
     g.amp_time(ts)
+    g.plot(ts)
 
-    # test we can make cq pulse
-    # c = CW(freq0=1, fwidth=0.1)
-    # ts = np.linspace(0, 30, 1001)
-    # c.amp_time(ts)
+    # test we can make cw pulse
+    from tidy3d.components.source import ContinuousWave
+
+    c = ContinuousWave(freq0=1, fwidth=0.1)
+    ts = np.linspace(0, 30, 1001)
+    c.amp_time(ts)
+
+
+def test_dipole():
+
+    g = GaussianPulse(freq0=1, fwidth=0.1)
+    p = PointDipole(center=(1, 2, 3), source_time=g, polarization="Ex")
+    p.plot(y=2)
+
+    with pytest.raises(pydantic.ValidationError) as e_info:
+        p = PointDipole(size=(1, 1, 1), source_time=g, center=(1, 2, 3), polarization="Ex")
 
 
 def test_FieldSource():
@@ -706,20 +719,47 @@ def test_FieldSource():
 
     # test we can make planewave
     s = PlaneWave(size=(0, inf, inf), source_time=g, pol_angle=np.pi / 2, direction="+")
+    s.plot(y=0)
 
     # test we can make gaussian beam
     s = GaussianBeam(size=(0, 1, 1), source_time=g, pol_angle=np.pi / 2, direction="+")
+    s.plot(y=0)
+
+    # test we can make an astigmatic gaussian beam
+    s = AstigmaticGaussianBeam(
+        size=(0, 1, 1),
+        source_time=g,
+        pol_angle=np.pi / 2,
+        direction="+",
+        waist_sizes=(0.2, 0.4),
+        waist_distances=(0.1, 0.3),
+    )
 
     # test we can make mode source
     s = ModeSource(size=(0, 1, 1), direction="+", source_time=g, mode_spec=mode_spec, mode_index=0)
+    s.plot(y=0)
 
-    # test that non-planar geometry crashes plane wave and gaussian beam
+    # test that non-planar geometry crashes plane wave and gaussian beams
     with pytest.raises(ValidationError) as e_info:
         s = PlaneWave(size=(1, 1, 1), source_time=g, pol_angle=np.pi / 2, direction="+")
     with pytest.raises(ValidationError) as e_info:
         s = GaussianBeam(size=(1, 1, 1), source_time=g, pol_angle=np.pi / 2, direction="+")
     with pytest.raises(ValidationError) as e_info:
+        s = AstigmaticGaussianBeam(
+            size=(1, 1, 1),
+            source_time=g,
+            pol_angle=np.pi / 2,
+            direction="+",
+            waist_sizes=(0.2, 0.4),
+            waist_distances=(0.1, 0.3),
+        )
+    with pytest.raises(ValidationError) as e_info:
         s = ModeSource(size=(1, 1, 1), source_time=g, mode_spec=mode_spec)
+
+    from tidy3d.components.source import TFSF
+
+    s = TFSF(size=(1, 1, 1), direction="+", source_time=g, injection_axis=2)
+    s.plot(z=0)
 
 
 """ monitors """
@@ -730,7 +770,28 @@ def test_monitor():
     size = (1, 2, 3)
     center = (1, 2, 3)
 
-    m = FieldMonitor(size=size, center=center, freqs=[1, 2, 3], name="test_monitor")
+    m1 = FieldMonitor(size=size, center=center, freqs=[1, 2, 3], name="test_monitor")
+    m1.surfaces()
+    m2 = FieldTimeMonitor(size=size, center=center, name="test_mon")
+    m3 = FluxMonitor(size=(1, 1, 0), center=center, freqs=[1, 2, 3], name="test_mon")
+    m4 = FluxTimeMonitor(size=(1, 1, 0), center=center, name="test_mon")
+    m5 = ModeMonitor(
+        size=(1, 1, 0), center=center, mode_spec=ModeSpec(), freqs=[1, 2, 3], name="test_mon"
+    )
+    m6 = ModeFieldMonitor(
+        size=(1, 1, 0), center=center, mode_spec=ModeSpec(), freqs=[1, 2, 3], name="test_mon"
+    )
+    m7 = PermittivityMonitor(size=size, center=center, freqs=[1, 2, 3], name="perm")
+
+    tmesh = np.linspace(0, 1, 10)
+
+    for m in [m1, m2, m3, m4, m5, m6, m7]:
+        m.plot(y=2)
+        m.storage_size(num_cells=100, tmesh=tmesh)
+
+    for m in [m2, m4]:
+        m.time_inds(tmesh=tmesh)
+        m.num_steps(tmesh=tmesh)
 
 
 def test_monitor_plane():
@@ -805,7 +866,7 @@ def test_mode_object_syms():
         sim = Simulation(
             center=(1.0, -1.0, 0.5),
             size=(2.0, 2.0, 2.0),
-            grid_size=(0.01, 0.01, 0.01),
+            grid_spec=GridSpec.auto(wavelength=C_0 / 1.0),
             run_time=1e-12,
             symmetry=(1, -1, 0),
             sources=[ModeSource(size=(2, 2, 0), direction="+", source_time=g)],
@@ -816,7 +877,7 @@ def test_mode_object_syms():
         sim = Simulation(
             center=(1.0, -1.0, 0.5),
             size=(2.0, 2.0, 2.0),
-            grid_size=(0.01, 0.01, 0.01),
+            grid_spec=GridSpec.auto(wavelength=C_0 / 1.0),
             run_time=1e-12,
             symmetry=(1, -1, 0),
             monitors=[ModeMonitor(size=(2, 2, 0), name="mnt", freqs=[2], mode_spec=ModeSpec())],
@@ -826,7 +887,7 @@ def test_mode_object_syms():
     sim = Simulation(
         center=(1.0, -1.0, 0.5),
         size=(2.0, 2.0, 2.0),
-        grid_size=(0.01, 0.01, 0.01),
+        grid_spec=GridSpec.auto(wavelength=C_0 / 1.0),
         run_time=1e-12,
         symmetry=(1, -1, 0),
         sources=[ModeSource(center=(1, -1, 1), size=(2, 2, 0), direction="+", source_time=g)],
@@ -836,7 +897,7 @@ def test_mode_object_syms():
     sim = Simulation(
         center=(1.0, -1.0, 0.5),
         size=(2.0, 2.0, 2.0),
-        grid_size=(0.01, 0.01, 0.01),
+        grid_spec=GridSpec.auto(wavelength=C_0 / 1.0),
         run_time=1e-12,
         symmetry=(1, -1, 0),
         monitors=[
@@ -845,3 +906,54 @@ def test_mode_object_syms():
             )
         ],
     )
+
+
+def test_deep_copy():
+    """Make sure deep copying works as expceted with defaults."""
+    b = Box(size=(1, 1, 1))
+    m = Medium(permittivity=1)
+
+    s = Structure(
+        geometry=b,
+        medium=m,
+    )
+
+    s_shallow = s.copy(deep=False)
+
+    # with shallow copy, these should be the same objects
+    assert id(s.geometry) == id(s_shallow.geometry)
+    assert id(s.medium) == id(s_shallow.medium)
+
+    s_deep = s.copy(deep=True)
+
+    # with deep copy, these should be different objects
+    assert id(s.geometry) != id(s_deep.geometry)
+    assert id(s.medium) != id(s_deep.medium)
+
+    # default should be deep
+    s_default = s.copy()
+    assert id(s.geometry) != id(s_default.geometry)
+    assert id(s.medium) != id(s_default.medium)
+
+    # make sure other kwargs work, here we update the geometry to a sphere and shallow copy medium
+    s_kwargs = s.copy(deep=False, update={"geometry": Sphere(radius=1.0)})
+    assert id(s.medium) == id(s_kwargs.medium)
+    assert id(s.geometry) != id(s_kwargs.geometry)
+
+    # behavior of modifying attributes
+    s_default = s.copy()
+    s_default.geometry = Sphere(radius=1.0)
+    assert id(s.geometry) != id(s_default.geometry)
+
+    s_shallow = s.copy(deep=False)
+    s_shallow.geometry = Sphere(radius=1.0)
+    assert id(s.geometry) != id(s_shallow.geometry)
+
+    # behavior of modifying attributes of attributes
+    s_default = s.copy()
+    s_default.geometry.size = (2, 2, 2)
+    assert id(s.geometry) != id(s_default.geometry)
+
+    s_shallow = s.copy(deep=False)
+    s_shallow.geometry.size = (2, 2, 2)
+    assert id(s.geometry) == id(s_shallow.geometry)

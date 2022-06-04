@@ -61,6 +61,10 @@ class Tidy3dBaseModel(pydantic.BaseModel):
             complex: lambda x: ComplexNumber(real=x.real, imag=x.imag),
         }
 
+    def copy(self, deep: bool = True, **kwargs) -> "Self":
+        """Copy a Tidy3dBaseModel.  With ``deep=True`` as default."""
+        return super().copy(deep=deep, **kwargs)
+
     def help(self, methods: bool = False) -> None:
         """Prints message describing the fields and methods of a :class:`Tidy3dBaseModel`.
 
@@ -76,14 +80,16 @@ class Tidy3dBaseModel(pydantic.BaseModel):
         rich.inspect(self, methods=methods)
 
     @classmethod
-    def from_file(cls, fname: str):
+    def from_file(cls, fname: str, **parse_kwargs):
         """Loads a :class:`Tidy3dBaseModel` from .yaml or .json file.
 
         Parameters
         ----------
         fname : str
             Full path to the .yaml or .json file to load the :class:`Tidy3dBaseModel` from.
-
+        **parse_kwargs
+            Keyword arguments passed to either pydantic's ``parse_file`` or ``parse_raw`` methods
+            for ``.json`` and ``.yaml`` file formats, respectively.
         Returns
         -------
         :class:`Tidy3dBaseModel`
@@ -94,9 +100,9 @@ class Tidy3dBaseModel(pydantic.BaseModel):
         >>> simulation = Simulation.from_file(fname='folder/sim.json')
         """
         if ".json" in fname:
-            return cls.from_json(fname=fname)
+            return cls.from_json(fname=fname, **parse_kwargs)
         if ".yaml" in fname:
-            return cls.from_yaml(fname=fname)
+            return cls.from_yaml(fname=fname, **parse_kwargs)
         raise FileError(f"File must be .json or .yaml, given {fname}")
 
     def to_file(self, fname: str) -> None:
@@ -118,7 +124,7 @@ class Tidy3dBaseModel(pydantic.BaseModel):
         raise FileError(f"File must be .json or .yaml, given {fname}")
 
     @classmethod
-    def from_json(cls, fname: str):
+    def from_json(cls, fname: str, **parse_file_kwargs):
         """Load a :class:`Tidy3dBaseModel` from .json file.
 
         Parameters
@@ -130,12 +136,14 @@ class Tidy3dBaseModel(pydantic.BaseModel):
         -------
         :class:`Tidy3dBaseModel`
             An instance of the component class calling `load`.
+        **parse_file_kwargs
+            Keyword arguments passed to pydantic's ``parse_file`` method.
 
         Example
         -------
         >>> simulation = Simulation.from_json(fname='folder/sim.json')
         """
-        return cls.parse_file(fname)
+        return cls.parse_file(fname, **parse_file_kwargs)
 
     def to_json(self, fname: str) -> None:
         """Exports :class:`Tidy3dBaseModel` instance to .json file
@@ -154,13 +162,15 @@ class Tidy3dBaseModel(pydantic.BaseModel):
             file_handle.write(json_string)
 
     @classmethod
-    def from_yaml(cls, fname: str):
+    def from_yaml(cls, fname: str, **parse_raw_kwargs):
         """Loads :class:`Tidy3dBaseModel` from .yaml file.
 
         Parameters
         ----------
         fname : str
             Full path to the .yaml file to load the :class:`Tidy3dBaseModel` from.
+        **parse_raw_kwargs
+            Keyword arguments passed to pydantic's ``parse_raw`` method.
 
         Returns
         -------
@@ -174,7 +184,7 @@ class Tidy3dBaseModel(pydantic.BaseModel):
         with open(fname, "r", encoding="utf-8") as yaml_in:
             json_dict = yaml.safe_load(yaml_in)
         json_raw = json.dumps(json_dict, indent=INDENT)
-        return cls.parse_raw(json_raw)
+        return cls.parse_raw(json_raw, **parse_raw_kwargs)
 
     def to_yaml(self, fname: str) -> None:
         """Exports :class:`Tidy3dBaseModel` instance to .yaml file.
@@ -194,17 +204,7 @@ class Tidy3dBaseModel(pydantic.BaseModel):
             yaml.dump(json_dict, file_handle, indent=INDENT)
 
     def __hash__(self) -> int:
-        """Hash a :class:`Tidy3dBaseModel` objects using its json string.
-
-        Returns
-        -------
-        int
-            Integer representation of the hash of the :class:`Tidy3dBaseModel`.
-
-        Example
-        -------
-        >>> hash_integer = hash(simulation)
-        """
+        """Hash a :class:`Tidy3dBaseModel` objects using its json string."""
         return hash(self.json())
 
     def __lt__(self, other):

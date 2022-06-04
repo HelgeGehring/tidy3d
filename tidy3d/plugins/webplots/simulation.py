@@ -2,21 +2,21 @@
 # pylint:disable=too-many-arguments, protected-access
 from typing import Tuple
 
-import plotly.graph_objects as go
-from shapely.geometry.base import BaseGeometry as ShapelyGeo
 import numpy as np
-from dash import dcc, html, Output, Input
+import plotly.graph_objects as go
+from dash import dcc, html
+from shapely.geometry.base import BaseGeometry as ShapelyGeo
+import pydantic as pd
 
-from .utils import PlotlyFig, add_fig_if_none, equal_aspect_plotly, plot_params_sim_boundary
 from .component import UIComponent
-
-from ...components.types import Axis
-from ...components.simulation import Simulation
-from ...components.structure import Structure
+from .utils import PlotlyFig, add_fig_if_none, equal_aspect_plotly, plot_params_sim_boundary
+from ...components.base import Tidy3dBaseModel
 from ...components.geometry import Geometry, Box
 from ...components.medium import Medium
+from ...components.simulation import Simulation
+from ...components.structure import Structure
+from ...components.types import Axis
 from ...components.viz import PlotParams, plot_params_pml
-from ...components.base import Tidy3dBaseModel
 
 
 def plotly_shape(
@@ -99,9 +99,21 @@ class StructurePlotly(Tidy3dBaseModel):
 class SimulationPlotly(UIComponent):
     """Simulation that adds plotly-based implementations of its standard plotting functions."""
 
-    simulation: Simulation
-    cs_axis: Axis = 0
-    cs_val: float = None
+    simulation: Simulation = pd.Field(
+        ..., title="Simulation", description="The Simulation instance to plot."
+    )
+
+    cs_axis: Axis = pd.Field(
+        0,
+        title="Cross-section axis",
+        description="The axis (0,1,2) representing the plotting plane normal direction.",
+    )
+
+    cs_val: float = pd.Field(
+        None,
+        title="Cross-section value",
+        description="The position along the plotting plane axis normal.",
+    )
 
     @property
     def xyz_label_bounds(self):
@@ -122,7 +134,7 @@ class SimulationPlotly(UIComponent):
         plotly_kwargs = {xyz_label: self.cs_val}
         return self.plotly(**plotly_kwargs)
 
-    def make_component(self, app):  # pylint: disable=too-many-locals
+    def make_component(self):  # pylint: disable=too-many-locals
         """Creates the dash component."""
 
         xyz_label, (xyz_min, xyz_max) = self.xyz_label_bounds
@@ -155,53 +167,10 @@ class SimulationPlotly(UIComponent):
         component = dcc.Tab(
             [
                 html.H1("Viewing Simulation."),
-                html.Div(
-                    [graph, xyz_selection], style={"display": "flex", "flex-direction": "row"}
-                ),
+                html.Div([graph, xyz_selection], style={"display": "flex", "flexDirection": "row"}),
             ],
             label="Simulation",
         )
-
-        @app.callback(
-            Output("simulation_plot", "figure"),
-            [
-                Input("simulation_cs_axis_dropdown", "value"),
-                Input("simulation_cs_slider", "value"),
-            ],
-        )
-        def set_fig_from_xyz_sliderbar(cs_axis_string, cs_val):
-            self.cs_axis = ["x", "y", "z"].index(cs_axis_string)
-            self.cs_val = float(cs_val)
-            return self.make_figure()
-
-        # set the xyz slider back to the average if the axis changes.
-        @app.callback(
-            Output("simulation_cs_slider", "value"),
-            Input("simulation_cs_axis_dropdown", "value"),
-        )
-        def reset_slider_position(value_cs_axis):
-            self.cs_axis = ["x", "y", "z"].index(value_cs_axis)
-            _, (xyz_min, xyz_max) = self.xyz_label_bounds
-            self.cs_val = float((xyz_min + xyz_max) / 2.0)
-            return self.cs_val
-
-        @app.callback(
-            Output("simulation_cs_slider", "min"),
-            Input("simulation_cs_axis_dropdown", "value"),
-        )
-        def set_min(cs_axis_string):
-            self.cs_axis = ["x", "y", "z"].index(cs_axis_string)
-            _, (xyz_min, _) = self.xyz_label_bounds
-            return xyz_min
-
-        @app.callback(
-            Output("simulation_cs_slider", "max"),
-            Input("simulation_cs_axis_dropdown", "value"),
-        )
-        def set_max(cs_axis_string):
-            self.cs_axis = ["x", "y", "z"].index(cs_axis_string)
-            _, (_, xyz_max) = self.xyz_label_bounds
-            return xyz_max
 
         return component
 
@@ -237,52 +206,8 @@ class SimulationPlotly(UIComponent):
             The supplied or created plotly ``Figure``.
         """
 
-        fig = self._plotly_bounding_box(x=x, y=y, z=z, fig=fig)
+        # fig = self._plotly_bounding_box(x=x, y=y, z=z, fig=fig)
         fig = self.plotly_structures(x=x, y=y, z=z, fig=fig)
-        fig = self.plotly_sources(x=x, y=y, z=z, fig=fig)
-        fig = self.plotly_monitors(x=x, y=y, z=z, fig=fig)
-        fig = self.plotly_symmetries(x=x, y=y, z=z, fig=fig)
-        fig = self.plotly_pml(x=x, y=y, z=z, fig=fig)
-        fig = self._plotly_cleanup(x=x, y=y, z=z, fig=fig)
-
-        return fig
-
-    @equal_aspect_plotly
-    @add_fig_if_none
-    def plotly_eps(
-        self,
-        x: float = None,
-        y: float = None,
-        z: float = None,
-        fig: PlotlyFig = None,
-    ) -> PlotlyFig:
-        """Plot each of simulation's components on a plane defined by one nonzero x,y,z coordinate.
-        The permittivity is plotted in grayscale based on its value at the specified frequency.
-        Uses plotly.
-
-        Parameters
-        ----------
-        x : float = None
-            position of plane in x direction, only one of x, y, z must be specified to define plane.
-        y : float = None
-            position of plane in y direction, only one of x, y, z must be specified to define plane.
-        z : float = None
-            position of plane in z direction, only one of x, y, z must be specified to define plane.
-        freq : float = None
-            Frequency to evaluate the relative permittivity of all mediums.
-            If not specified, evaluates at infinite frequency.
-        fig : plotly.graph_objects.Figure = None
-            plotly ``Figure`` to plot on, if not specified, one is created.
-
-
-        Returns
-        -------
-        plotly.graph_objects.Figure
-            The supplied or created plotly ``Figure``.
-        """
-
-        fig = self._plotly_bounding_box(x=x, y=y, z=z, fig=fig)
-        fig = self.plotly_structures_eps(x=x, y=y, z=z, fig=fig)
         fig = self.plotly_sources(x=x, y=y, z=z, fig=fig)
         fig = self.plotly_monitors(x=x, y=y, z=z, fig=fig)
         fig = self.plotly_symmetries(x=x, y=y, z=z, fig=fig)
@@ -319,9 +244,8 @@ class SimulationPlotly(UIComponent):
             The supplied or created plotly ``Figure``.
         """
 
-        medium_shapes = self.simulation._filter_structures_plane(
-            self.simulation.structures, x=x, y=y, z=z
-        )
+        structures = self.simulation.structures
+        medium_shapes = self.simulation._get_structures_plane(structures=structures, x=x, y=y, z=z)
         for (medium, shape) in medium_shapes:
             fig = self._plotly_shape_structure(medium=medium, shape=shape, fig=fig)
         return fig
@@ -336,56 +260,6 @@ class SimulationPlotly(UIComponent):
         )
         name = medium.name if medium.name else f"medium[{mat_index}]"
         fig = plotly_shape(shape=shape, plot_params=plot_params_struct, fig=fig, name=name)
-        return fig
-
-    @equal_aspect_plotly
-    @add_fig_if_none
-    def plotly_structures_eps(
-        self,
-        x: float = None,
-        y: float = None,
-        z: float = None,
-        freq: float = None,
-        fig: PlotlyFig = None,
-    ) -> PlotlyFig:
-        """Plot each of simulation's structures on a plane defined by one nonzero x,y,z coordinate.
-        The permittivity is plotted in grayscale based on its value at the specified frequency.
-
-        Parameters
-        ----------
-        x : float = None
-            position of plane in x direction, only one of x, y, z must be specified to define plane.
-        y : float = None
-            position of plane in y direction, only one of x, y, z must be specified to define plane.
-        z : float = None
-            position of plane in z direction, only one of x, y, z must be specified to define plane.
-        fig : plotly.graph_objects.Figure = None
-            plotly ``Figure`` to plot on, if not specified, one is created.
-
-        Returns
-        -------
-        plotly.graph_objects.Figure
-            The supplied or created plotly ``Figure``.
-        """
-
-        medium_shapes = self.simulation._filter_structures_plane(
-            self.simulation.structures, x=x, y=y, z=z
-        )
-        for (medium, shape) in medium_shapes:
-            fig = self._plotly_shape_structure_eps(freq=freq, medium=medium, shape=shape, fig=fig)
-        return fig
-
-    def _plotly_shape_structure_eps(
-        self,
-        freq: float,
-        medium: Medium,
-        shape: ShapelyGeo,
-        fig: PlotlyFig,
-    ) -> PlotlyFig:
-        """Plot a structure's cross section shape for a given medium, grayscale for permittivity."""
-        plot_params = self.simulation._get_structure_eps_plot_params(medium=medium, freq=freq)
-        plot_params.facecolor = f"rgb{tuple(3*[float(plot_params.facecolor)*255])}"
-        fig = plotly_shape(shape=shape, plot_params=plot_params, fig=fig)
         return fig
 
     @add_fig_if_none
@@ -520,7 +394,7 @@ class SimulationPlotly(UIComponent):
         for sym_axis, sym_value in enumerate(self.simulation.symmetry):
             if sym_value == 0 or sym_axis == normal_axis:
                 continue
-            sym_box = self.simulation._make_symmetry_box(sym_axis=sym_axis, sym_value=sym_value)
+            sym_box = self.simulation._make_symmetry_box(sym_axis=sym_axis)
             plot_params = self.simulation._make_symmetry_plot_params(sym_value=sym_value)
             sym_box_plotly = GeometryPlotly(geometry=sym_box)
             fig = sym_box_plotly.plotly(x=x, y=y, z=z, fig=fig, **plot_params.to_kwargs())
@@ -584,19 +458,14 @@ class SimulationPlotly(UIComponent):
         self,
         fig: PlotlyFig,
         normal_axis: Axis,
-        width_pixels: float = 700,
     ) -> PlotlyFig:
         """Set the lmits and make equal aspect."""
 
         (xmin, xmax), (ymin, ymax) = self._plotly_bounds(normal_axis=normal_axis)
 
-        width = xmax - xmin
-        height = ymax - ymin
-
         fig.update_xaxes(range=[xmin, xmax])
         fig.update_yaxes(range=[ymin, ymax])
 
-        fig.update_layout(width=float(width_pixels), height=float(width_pixels) * height / width)
         return fig
 
     @staticmethod

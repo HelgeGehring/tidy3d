@@ -1,13 +1,15 @@
 """Defines the FDTD grid."""
+
 from typing import Tuple, List
 
-import numpy as np  # pylint:disable=unused-import
-import pydantic
+import numpy as np
+import pydantic as pd
 
-from .base import Tidy3dBaseModel, TYPE_TAG_STR
-from .types import Array, Axis
-from .geometry import Box
-from ..log import SetupError
+from ..base import Tidy3dBaseModel, TYPE_TAG_STR
+from ..types import Array, Axis
+from ..geometry import Box
+
+from ...log import SetupError
 
 # data type of one dimensional coordinate array.
 Coords1D = Array[float]
@@ -24,15 +26,15 @@ class Coords(Tidy3dBaseModel):
     >>> coords = Coords(x=x, y=y, z=z)
     """
 
-    x: Coords1D = pydantic.Field(
+    x: Coords1D = pd.Field(
         ..., title="X Coordinates", description="1-dimensional array of x coordinates."
     )
 
-    y: Coords1D = pydantic.Field(
+    y: Coords1D = pd.Field(
         ..., title="Y Coordinates", description="1-dimensional array of y coordinates."
     )
 
-    z: Coords1D = pydantic.Field(
+    z: Coords1D = pd.Field(
         ..., title="Z Coordinates", description="1-dimensional array of z coordinates."
     )
 
@@ -54,19 +56,19 @@ class FieldGrid(Tidy3dBaseModel):
     >>> field_grid = FieldGrid(x=coords, y=coords, z=coords)
     """
 
-    x: Coords = pydantic.Field(
+    x: Coords = pd.Field(
         ...,
         title="X Positions",
         description="x,y,z coordinates of the locations of the x-component of a vector field.",
     )
 
-    y: Coords = pydantic.Field(
+    y: Coords = pd.Field(
         ...,
         title="Y Positions",
         description="x,y,z coordinates of the locations of the y-component of a vector field.",
     )
 
-    z: Coords = pydantic.Field(
+    z: Coords = pd.Field(
         ...,
         title="Z Positions",
         description="x,y,z coordinates of the locations of the z-component of a vector field.",
@@ -87,13 +89,13 @@ class YeeGrid(Tidy3dBaseModel):
     >>> Ex_coords = yee_grid.E.x
     """
 
-    E: FieldGrid = pydantic.Field(
+    E: FieldGrid = pd.Field(
         ...,
         title="Electric Field Grid",
         description="Coordinates of the locations of all three components of the electric field.",
     )
 
-    H: FieldGrid = pydantic.Field(
+    H: FieldGrid = pd.Field(
         ...,
         title="Electric Field Grid",
         description="Coordinates of the locations of all three components of the magnetic field.",
@@ -128,7 +130,7 @@ class Grid(Tidy3dBaseModel):
     >>> yee_grid = grid.yee
     """
 
-    boundaries: Coords = pydantic.Field(
+    boundaries: Coords = pd.Field(
         ...,
         title="Boundary Coordinates",
         description="x,y,z coordinates of the boundaries between cells, defining the FDTD grid.",
@@ -319,13 +321,16 @@ class Grid(Tidy3dBaseModel):
 
         return Coords(**yee_coords)
 
-    def discretize_inds(self, box: Box) -> List[Tuple[int, int]]:
+    def discretize_inds(self, box: Box, extend: bool = False) -> List[Tuple[int, int]]:
         """Start and stopping indexes for the cells that intersect with a :class:`Box`.
 
         Parameters
         ----------
         box : :class:`Box`
             Rectangular geometry within simulation to discretize.
+        extend : bool = False
+            If ``True``, ensure that the returned indexes extend sufficiently in very direction to
+            be able to interpolate any field component at any point within the ``box``.
 
         Returns
         -------
@@ -340,8 +345,8 @@ class Grid(Tidy3dBaseModel):
         inds_list = []
 
         # for each dimension
-        for axis_label, pt_min, pt_max in zip("xyz", pts_min, pts_max):
-            bound_coords = boundaries.dict()[axis_label]
+        for axis, (pt_min, pt_max) in enumerate(zip(pts_min, pts_max)):
+            bound_coords = boundaries.to_list[axis]
             assert pt_min <= pt_max, "min point was greater than max point"
 
             # index of smallest coord greater than than pt_max
@@ -352,7 +357,60 @@ class Grid(Tidy3dBaseModel):
             inds_leq_pt_min = np.where(bound_coords <= pt_min)[0]
             ind_min = 0 if len(inds_leq_pt_min) == 0 else inds_leq_pt_min[-1]
 
+            if extend:
+                # If the box bounds on the left side are to the left of the closest grid center,
+                # we need an extra pixel to be able to interpolate the center components.
+                if box.bounds[0][axis] < self.centers.to_list[axis][ind_min]:
+                    ind_min -= 1
+
+                # We always need an extra pixel on the right for the surface components.
+                ind_max += 1
+
             # store indexes
             inds_list.append((ind_min, ind_max))
 
         return inds_list
+
+    def periodic_subspace(self, axis: Axis, ind_beg: int = 0, ind_end: int = 0) -> Coords1D:
+        """Pick a subspace of 1D boundaries within ``range(ind_beg, ind_end)``. If any indexes lie
+        outside of the grid boundaries array, periodic padding is used, where the zeroth and last
+        element of the boundaries are identified.
+
+        Parameters
+        ----------
+        axis : Axis
+            Axis index along which to pick the subspace.
+        ind_beg : int = 0
+            Starting index for the subspace.
+        ind_end : int = 0
+            Ending index for the subspace.
+
+        Returns
+        -------
+        Coords1D
+            The subspace of the grid along ``axis``.
+        """
+
+        coords = self.boundaries.to_list[axis]
+        padded_coords = coords
+        num_coords = coords.size
+        num_cells = num_coords - 1
+        coords_width = coords[-1] - coords[0]
+
+        # Pad on the left if needed
+        if ind_beg < 0:
+            num_pad = int(np.ceil(-ind_beg / num_cells))
+            coords_pad = coords[:-1, None] + (coords_width * np.arange(-num_pad, 0))[None, :]
+            coords_pad = coords_pad.T.ravel()
+            padded_coords = np.concatenate([coords_pad, padded_coords])
+            ind_beg += num_pad * num_cells
+            ind_end += num_pad * num_cells
+
+        # Pad on the right if needed
+        if ind_end >= padded_coords.size:
+            num_pad = int(np.ceil((ind_end - padded_coords.size) / num_cells))
+            coords_pad = coords[1:, None] + (coords_width * np.arange(1, num_pad + 1))[None, :]
+            coords_pad = coords_pad.T.ravel()
+            padded_coords = np.concatenate([padded_coords, coords_pad])
+
+        return padded_coords[ind_beg:ind_end]

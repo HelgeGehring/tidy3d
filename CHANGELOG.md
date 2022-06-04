@@ -6,11 +6,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- App / GUI for visualizing contents of `SimulationData` in `tidy3d.plugings.plotly`.
+
+### Changed
+
+## [1.3.3] - 2022-5-18
+
+### Fixed
+
+ - Bug in `Cylinder.inside` when `axis != 2`.
+
+### Added
+
+ - `AstigmaticGaussianBeam` source.
+
+### Changed
+
+ - Internal functions that may require hashing the simulation many times now use a `make_static` decorator. This pre-computes the simulation hash and stores it,
+ and makes sure that the simulation has not changed at the beginning and end of the function execution.
+ - Speeding up initialization of `PolySlab` when there is no dilation or slant angle.
+ - Allow customizing data range that colormap covers in `plot_field`.
+ - Speeding up of the automatic grid generation using Rtree and other improvements.
+ - Better handling of http response errors.
+ - In `web.monitor`, the estimated cost is only displayed when available; avoid "Unable to get cost" warning.
+ - In `PolySlab.from_gds`, the selected polygons are first merged if possible, before the `PolySlab`-s are made. This avoids bugs e.g. in the case of slanted walls.
+
+## [1.3.2] - 2022-4-30
+
+### Fixed
+
+ - Bug in nonuniform mesh where the simulation background medium may be taken into account if higher than other structures overriding it.
+
+## [1.3.1] - 2022-4-29
+
+### Added
+
+### Changed
+
+ - The `copy()` method of Tidy3d components is deep by default.
+ - Maximum allowed number of distinct materials is now 65530.
+
+### Fixed
+
+ - Monitor/source opacity values also applied to associated arrows.
+ - Auto meshing in the presence of symmetries ignores anything outside of the main symmetry quadrant.
+ - If an interface is completely covered by another structure, it is ignored by the mesher.
+
+## [1.3.0] - 2022-4-26
+
+### Added
+
+- New `grid_spec` Field in `Simulation` that allows more flexibility in defining the mesh.
+- `GridSpec1d` class defining how the meshing along each dimension should be done, with sublcasses `UniformGrid` and `CustomGrid` that cover the functionality 
+  previously offered by supplying a float or a list of floats to `Simulation.grid_size`. New functionality offered by `AutoGrid` subclass, with the 
+  mesh automatically generated based on the minimum required steps per wavelength.
+- New `PointDipole` source.
+- Opacity kwargs for monitor and source in `sim.plot`.
+- Separated `plotly`-based requirements from core requrements file, can be added with `"pip install tidy3d-beta[plotly]"`.
+
+### Changed
+- `Simulation.grid_spec` uses the default `GridSpec`, which has `AutoGrid(min_steps_per_wvl=10)` in each direction. To initialize a `Simulation` then it is no 
+  longer needed to provide grid information, if sources are added to the simulation. Otherwise an error will be raised asking to provide a wavelength for the auto mesh.
+- `VolumeSource` is now called `UniformCurrentSource`.
+- S-matrix module now places the monitors exactly at the port locations and offsets the source slightly for numerical reasons (more accurate).
+- Fixed bug in `PolySlab` visualization with sidewalls.
+- Inheritance structure of `Source` reorganized.
+- Better handling of only one `td.inf` in `Box.from_bounds`.
+- Added proper label to intensity plots.
+- Made all attributes `Field()` objects in `data.py` to clean up docs.
+- Proper handling of `Medium.eps_model` at frequency of `td.inf` and `None`.
+
+### Removed
+- `Simulation.grid_size` is removed in favor of `Simulation.grid_spec`.
+
+## [1.2.2] - 2022-4-16
+
+### Added
+- `SimulationDataApp` GUI for visualizing contents of `SimulationData` in `tidy3d.plugings`.
+- `SimulationPlotly` interface for generating `Simulation.plot()` figures using `plotly` instead of `matplotlib`.
+- New `PermittivityMonitor` and `PermittivityData` to store the complex relative permittivity as used in the simulation.
+- The maximum credit cost for a simulation can now be queried using `web.estimate_cost`. It is also displayed by default during `web.upload`.
 
 ### Changed
 - Faster plotting for matplotlib and plotly.
 - `SimulationData` normalization keeps track of source index and can be normalized when loading directly from .hdf5 file.
+- Monitor data with symmetries now store the minimum required data to file and expands the symmetries on the fly.
+- Significant speedup in plotting complicated simulations without patch transparency.
+- When a list of `dl` is provided as a `grid_size` along a given direction, the grid is placed such that the total size `np.sum(dl)` is centered at the simulation center.
+  Previously, a grid boundary was always placed at the simulation center.
 
 ## [1.2.1] - 2022-3-30
 
@@ -224,7 +306,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Job and Batch classes for better simulation handling (eventually to fully replace webapi functions).
 - A large number of small improvements and bug fixes.
 
-[Unreleased]: https://github.com/flexcompute/tidy3d/compare/v1.2.1...develop
+[Unreleased]: https://github.com/flexcompute/tidy3d/compare/v1.3.2...develop
+[1.3.3]: https://github.com/flexcompute/tidy3d/compare/v1.3.2...1.3.3
+[1.3.2]: https://github.com/flexcompute/tidy3d/compare/v1.3.1...1.3.2
+[1.3.1]: https://github.com/flexcompute/tidy3d/compare/v1.3.0...1.3.1
+[1.3.0]: https://github.com/flexcompute/tidy3d/compare/v1.2.2...v1.3.0
+[1.2.2]: https://github.com/flexcompute/tidy3d/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/flexcompute/tidy3d/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/flexcompute/tidy3d/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/flexcompute/tidy3d/compare/v1.1.0...v1.1.1

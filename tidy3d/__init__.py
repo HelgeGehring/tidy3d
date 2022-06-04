@@ -12,7 +12,7 @@ from .components import PMLParams, AbsorberParams
 from .components import DefaultPMLParameters, DefaultStablePMLParameters, DefaultAbsorberParameters
 
 # grid
-from .components import Grid, Coords
+from .components import Grid, Coords, GridSpec, UniformGrid, CustomGrid, AutoGrid
 
 # geometry
 from .components import Box, Sphere, Cylinder, PolySlab
@@ -29,11 +29,12 @@ from .components import ModeSpec
 
 # sources
 from .components import GaussianPulse, ContinuousWave
-from .components import VolumeSource, PlaneWave, ModeSource, GaussianBeam
+from .components import UniformCurrentSource, PlaneWave, ModeSource, PointDipole
+from .components import GaussianBeam, AstigmaticGaussianBeam
 
 # monitors
 from .components import FieldMonitor, FieldTimeMonitor, FluxMonitor, FluxTimeMonitor
-from .components import ModeMonitor, ModeFieldMonitor
+from .components import ModeMonitor, ModeFieldMonitor, PermittivityMonitor
 
 # simulation
 from .components import Simulation
@@ -41,7 +42,8 @@ from .components import Simulation
 # data
 from .components import SimulationData, FieldData, FluxData, FluxTimeData
 from .components import DATA_TYPE_MAP, ScalarFieldData, ScalarFieldTimeData
-from .components import ModeData, ModeAmpsData, ModeIndexData
+from .components import ModeData, ModeAmpsData, ModeIndexData, ModeFieldData, PermittivityData
+from .components import ScalarPermittivityData
 
 # constants imported as `C_0 = td.C_0` or `td.constants.C_0`
 from .constants import C_0, ETA_0, HBAR, EPSILON_0, MU_0, Q_e, inf

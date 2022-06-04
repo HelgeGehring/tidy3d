@@ -185,6 +185,9 @@ class AbstractModeMonitor(PlanarMonitor, FreqMonitor):
         # call the monitor.plot() function first
         ax = super().plot(x=x, y=y, z=z, ax=ax, **kwargs)
 
+        kwargs_alpha = kwargs.get("alpha")
+        arrow_alpha = ARROW_ALPHA if kwargs_alpha is None else kwargs_alpha
+
         # and then add an arrow using the direction comuputed from `_dir_arrow`.
         ax = self._plot_arrow(
             x=x,
@@ -193,7 +196,7 @@ class AbstractModeMonitor(PlanarMonitor, FreqMonitor):
             ax=ax,
             direction=self._dir_arrow,
             color=ARROW_COLOR_MONITOR,
-            alpha=ARROW_ALPHA,
+            alpha=arrow_alpha,
             both_dirs=True,
         )
         return ax
@@ -319,6 +322,28 @@ class FieldTimeMonitor(AbstractFieldMonitor, TimeMonitor):
         return BYTES_REAL * num_steps * num_cells * len(self.fields)
 
 
+class PermittivityMonitor(FreqMonitor):
+    """:class:`Monitor` that records the diagonal components of the complex-valued relative
+    permittivity tensor in the frequency domain. The recorded data has the same shape as a
+    :class:`.FieldMonitor` of the same geometry: the permittivity values are saved at the
+    Yee grid locations, and can be interpolated to any point inside the monitor.
+
+    Example
+    -------
+    >>> monitor = PermittivityMonitor(
+    ...     center=(1,2,3),
+    ...     size=(2,2,2),
+    ...     freqs=[250e12, 300e12],
+    ...     name='eps_monitor')
+    """
+
+    _data_type: Literal["PermittivityData"] = pydantic.Field("PermittivityData")
+
+    def storage_size(self, num_cells: int, tmesh: Array) -> int:
+        # stores 3 complex number per grid cell, per frequency
+        return BYTES_COMPLEX * num_cells * len(self.freqs) * 3
+
+
 class FluxMonitor(AbstractFluxMonitor, FreqMonitor):
     """:class:`Monitor` that records power flux through a plane in the frequency domain.
 
@@ -406,5 +431,11 @@ class ModeFieldMonitor(AbstractModeMonitor):
 
 # types of monitors that are accepted by simulation
 MonitorType = Union[
-    FieldMonitor, FieldTimeMonitor, FluxMonitor, FluxTimeMonitor, ModeMonitor, ModeFieldMonitor
+    FieldMonitor,
+    FieldTimeMonitor,
+    PermittivityMonitor,
+    FluxMonitor,
+    FluxTimeMonitor,
+    ModeMonitor,
+    ModeFieldMonitor,
 ]

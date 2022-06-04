@@ -6,7 +6,7 @@ from .pml import PMLParams, AbsorberParams
 from .pml import DefaultPMLParameters, DefaultStablePMLParameters, DefaultAbsorberParameters
 
 # grid
-from .grid import Grid, Coords
+from .grid import Grid, Coords, GridSpec, UniformGrid, CustomGrid, AutoGrid
 
 # geometry
 from .geometry import Box, Sphere, Cylinder, PolySlab
@@ -24,12 +24,13 @@ from .mode import ModeSpec
 
 # source
 from .source import GaussianPulse, ContinuousWave
-from .source import VolumeSource, PlaneWave, ModeSource, GaussianBeam
+from .source import UniformCurrentSource, PlaneWave, ModeSource, PointDipole
+from .source import GaussianBeam, AstigmaticGaussianBeam
 
 # monitor
 from .monitor import FreqMonitor, TimeMonitor, FieldMonitor, FieldTimeMonitor
 from .monitor import Monitor, FluxMonitor, FluxTimeMonitor, ModeMonitor
-from .monitor import ModeFieldMonitor
+from .monitor import ModeFieldMonitor, PermittivityMonitor
 
 # simulation
 from .simulation import Simulation
@@ -37,3 +38,4 @@ from .simulation import Simulation
 # data
 from .data import SimulationData, FieldData, FluxData, ModeData, FluxTimeData
 from .data import ScalarFieldData, ScalarFieldTimeData, ModeAmpsData, ModeIndexData, DATA_TYPE_MAP
+from .data import ModeFieldData, PermittivityData, ScalarPermittivityData

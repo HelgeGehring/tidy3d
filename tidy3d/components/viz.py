@@ -88,7 +88,7 @@ class PlotParams(Tidy3dBaseModel):
         """Update the plot params with supplied kwargs."""
         new_plot_params = self.copy(deep=True)
         for key, value in kwargs.items():
-            if key not in ("type",):
+            if key not in ("type",) and value is not None:
                 setattr(new_plot_params, key, value)
         return new_plot_params
 
@@ -107,6 +107,7 @@ plot_params_source = PlotParams(alpha=0.4, facecolor="limegreen", edgecolor="lim
 plot_params_monitor = PlotParams(alpha=0.4, facecolor="orange", edgecolor="orange", lw=3)
 plot_params_pml = PlotParams(alpha=0.7, facecolor="gray", edgecolor="gray", hatch="x")
 plot_params_symmetry = PlotParams(edgecolor="gray", facecolor="gray", alpha=0.6)
+plot_params_override_structures = PlotParams(linewidth=0.4, edgecolor="black", fill=False)
 
 # stores color of simulation.structures for given index in simulation.medium_map
 MEDIUM_CMAP = [

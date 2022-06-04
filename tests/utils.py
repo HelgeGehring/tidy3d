@@ -35,7 +35,7 @@ def prepend_tmp(path):
 
 SIM_MONITORS = Simulation(
     size=(10.0, 10.0, 10.0),
-    grid_size=(0.1, 0.1, 0.1),
+    grid_spec=GridSpec(wavelength=1.0),
     run_time=1e-13,
     monitors=[
         FieldMonitor(size=(1, 1, 1), center=(0, 1, 0), freqs=[1, 2, 5, 7, 8], name="field_freq"),
@@ -54,7 +54,6 @@ SIM_MONITORS = Simulation(
 
 SIM_FULL = Simulation(
     size=(10.0, 10.0, 10.0),
-    grid_size=(0.1, 0.1, 0.1),
     run_time=40e-11,
     structures=[
         Structure(
@@ -82,7 +81,7 @@ SIM_FULL = Simulation(
         ),
     ],
     sources=[
-        VolumeSource(
+        UniformCurrentSource(
             size=(0, 0, 0),
             center=(0, 0.5, 0),
             polarization="Hx",
@@ -90,7 +89,15 @@ SIM_FULL = Simulation(
                 freq0=2e14,
                 fwidth=4e13,
             ),
-        )
+        ),
+        PointDipole(
+            center=(0, 0.5, 0),
+            polarization="Ex",
+            source_time=GaussianPulse(
+                freq0=2e14,
+                fwidth=4e13,
+            ),
+        ),
     ],
     monitors={
         FieldMonitor(size=(0, 0, 0), center=(0, 0, 0), freqs=[1.5e14, 2e14], name="point"),
@@ -111,7 +118,6 @@ SIM_FULL = Simulation(
 # Initialize simulation
 SIM_CONVERT = td.Simulation(
     size=[4, 4, 4],
-    grid_size=(0.1, 0.1, 0.1),
     structures=[
         td.Structure(
             geometry=td.Box(center=[0, 0, 0], size=[1.5, 1.5, 1.5]),
@@ -119,7 +125,7 @@ SIM_CONVERT = td.Simulation(
         )
     ],
     sources=[
-        td.VolumeSource(
+        td.UniformCurrentSource(
             center=(0, -1.5, 0),
             size=(0.4, 0.4, 0.4),
             source_time=td.GaussianPulse(freq0=3e14, fwidth=1e13),

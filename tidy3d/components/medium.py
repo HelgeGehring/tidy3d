@@ -11,9 +11,11 @@ from .base import Tidy3dBaseModel
 from .types import PoleAndResidue, Ax, FreqBound
 from .viz import add_ax_if_none
 from .validators import validate_name_str
-
 from ..constants import C_0, pec_val, EPSILON_0, HERTZ, CONDUCTIVITY, PERMITTIVITY, RADPERSEC
 from ..log import log, ValidationError
+
+# evaluate frequency as this number (Hz) if inf
+FREQ_EVAL_INF = 1e50
 
 
 def ensure_freq_in_range(eps_model: Callable[[float], complex]) -> Callable[[float], complex]:
@@ -22,8 +24,16 @@ def ensure_freq_in_range(eps_model: Callable[[float], complex]) -> Callable[[flo
     def _eps_model(self, frequency: float) -> complex:
         """New eps_model function."""
 
-        # if frequency is none, don't check, return original function
-        if frequency is None or self.frequency_range is None:
+        # evaluate infs and None as FREQ_EVAL_INF
+        is_inf_scalar = isinstance(frequency, float) and np.isinf(frequency)
+        if frequency is None or is_inf_scalar:
+            frequency = FREQ_EVAL_INF
+
+        if isinstance(frequency, np.ndarray):
+            frequency[np.where(np.isinf(frequency))] = FREQ_EVAL_INF
+
+        # if frequency range not present just return original function
+        if self.frequency_range is None:
             return eps_model(self, frequency)
 
         fmin, fmax = self.frequency_range
@@ -259,7 +269,7 @@ class Medium(AbstractMedium):
         )
 
     @classmethod
-    def from_nk(cls, n: float, k: float, freq: float):
+    def from_nk(cls, n: float, k: float, freq: float, **kwargs):
         """Convert ``n`` and ``k`` values at frequency ``freq`` to :class:`Medium`.
 
         Parameters
@@ -277,7 +287,7 @@ class Medium(AbstractMedium):
             medium containing the corresponding ``permittivity`` and ``conductivity``.
         """
         eps, sigma = AbstractMedium.nk_to_eps_sigma(n, k, freq)
-        return cls(permittivity=eps, conductivity=sigma)
+        return cls(permittivity=eps, conductivity=sigma, **kwargs)
 
 
 class AnisotropicMedium(AbstractMedium):
@@ -413,7 +423,7 @@ class PoleResidue(DispersiveMedium):
         """Complex-valued permittivity as a function of frequency."""
 
         omega = 2 * np.pi * frequency
-        eps = self.eps_inf + 0.0j * frequency
+        eps = self.eps_inf + np.zeros_like(frequency) + 0.0j
         for (a, c) in self.poles:
             a_cc = np.conj(a)
             c_cc = np.conj(c)
@@ -499,7 +509,7 @@ class Sellmeier(DispersiveMedium):
         )
 
     @classmethod
-    def from_dispersion(cls, n: float, freq: float, dn_dwvl: float = 0):
+    def from_dispersion(cls, n: float, freq: float, dn_dwvl: float = 0, **kwargs):
         """Convert ``n`` and wavelength dispersion ``dn_dwvl`` values at frequency ``freq`` to
         a single-pole :class:`Sellmeier` medium.
 
@@ -529,7 +539,7 @@ class Sellmeier(DispersiveMedium):
         b_coeff = (wvl**2 - c_coeff) / wvl**2 * nsqm1
         coeffs = [(b_coeff, c_coeff)]
 
-        return cls(coeffs=coeffs)
+        return cls(coeffs=coeffs, **kwargs)
 
 
 class Lorentz(DispersiveMedium):

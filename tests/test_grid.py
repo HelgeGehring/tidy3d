@@ -51,7 +51,11 @@ def test_sim_nonuniform_small():
     sim = td.Simulation(
         center=(1, 0, 0),
         size=(size_x, 4, 4),
-        grid_size=(grid_size_x, 1, 1),
+        grid_spec=td.GridSpec(
+            grid_x=td.CustomGrid(dl=grid_size_x),
+            grid_y=td.UniformGrid(dl=1.0),
+            grid_z=td.UniformGrid(dl=1.0),
+        ),
         pml_layers=[td.PML(num_layers=num_layers_pml_x), None, None],
         run_time=1e-12,
     )
@@ -96,7 +100,11 @@ def test_sim_nonuniform_large():
     sim = td.Simulation(
         center=(1, 0, 0),
         size=(size_x, 4, 4),
-        grid_size=(grid_size_x, 1, 1),
+        grid_spec=td.GridSpec(
+            grid_x=td.CustomGrid(dl=grid_size_x),
+            grid_y=td.UniformGrid(dl=1.0),
+            grid_z=td.UniformGrid(dl=1.0),
+        ),
         pml_layers=[td.PML(num_layers=num_layers_pml_x), None, None],
         run_time=1e-12,
     )
@@ -127,7 +135,7 @@ def test_sim_nonuniform_large():
 
 def test_sim_grid():
 
-    sim = td.Simulation(size=(4, 4, 4), grid_size=(1, 1, 1), run_time=1e-12)
+    sim = td.Simulation(size=(4, 4, 4), grid_spec=td.GridSpec.uniform(1.0), run_time=1e-12)
 
     for c in sim.grid.centers.dict(exclude={TYPE_TAG_STR}).values():
         assert np.all(c == np.array([-1.5, -0.5, 0.5, 1.5]))
@@ -139,11 +147,11 @@ def test_sim_symmetry_grid():
     """tests that a grid symmetric w.r.t. the simulation center is created in presence of
     symmetries."""
 
-    grid_size = [2, 1, 3, 2]
+    grid_1d = td.CustomGrid(dl=[2, 1, 3, 2])
     sim = td.Simulation(
         center=(1, 1, 1),
-        size=(10, 10, 10),
-        grid_size=(grid_size, grid_size, grid_size),
+        size=(11, 11, 11),
+        grid_spec=td.GridSpec(grid_x=grid_1d, grid_y=grid_1d, grid_z=grid_1d),
         pml_layers=[
             td.PML(num_layers=2),
         ]
@@ -154,8 +162,8 @@ def test_sim_symmetry_grid():
 
     coords_x, coords_y, coords_z = sim.grid.boundaries.to_list
 
-    # Assert coords size is even for the non-symmetry axis but odd otherwise
-    assert coords_x.size % 2 == 0
+    # Assert coords size is odd
+    assert coords_x.size % 2 != 0
     assert coords_y.size % 2 != 0
     assert coords_z.size % 2 != 0
 
@@ -170,7 +178,7 @@ def test_sim_pml_grid():
 
     sim = td.Simulation(
         size=(4, 4, 4),
-        grid_size=(1, 1, 1),
+        grid_spec=td.GridSpec.uniform(1.0),
         pml_layers=(td.PML(num_layers=2), td.Absorber(num_layers=2), td.StablePML(num_layers=2)),
         run_time=1e-12,
     )
@@ -183,7 +191,7 @@ def test_sim_pml_grid():
 
 def test_sim_discretize_vol():
 
-    sim = td.Simulation(size=(4, 4, 4), grid_size=(1, 1, 1), run_time=1e-12)
+    sim = td.Simulation(size=(4, 4, 4), grid_spec=td.GridSpec.uniform(1.0), run_time=1e-12)
 
     vol = td.Box(size=(1.9, 1.9, 1.9))
 
@@ -200,7 +208,7 @@ def test_sim_discretize_vol():
 
 def test_sim_discretize_plane():
 
-    sim = td.Simulation(size=(4, 4, 4), grid_size=(1, 1, 1), run_time=1e-12)
+    sim = td.Simulation(size=(4, 4, 4), grid_spec=td.GridSpec.uniform(1.0), run_time=1e-12)
 
     plane = td.Box(size=(6, 6, 0))
 
@@ -213,3 +221,27 @@ def test_sim_discretize_plane():
     assert np.all(subgrid.centers.x == np.array([-1.5, -0.5, 0.5, 1.5]))
     assert np.all(subgrid.centers.y == np.array([-1.5, -0.5, 0.5, 1.5]))
     assert np.all(subgrid.centers.z == np.array([0.5]))
+
+
+def test_grid_auto_uniform():
+    """Compare GridSpec.auto and GridSpec.uniform in a simulation without structures."""
+
+    sim_uniform = td.Simulation(
+        size=(4, 4, 4),
+        grid_spec=td.GridSpec.uniform(0.1),
+        run_time=1e-12,
+        medium=td.Medium(permittivity=4),
+    )
+
+    sim_auto = td.Simulation(
+        size=(4, 4, 4),
+        grid_spec=td.GridSpec.auto(wavelength=2.4, min_steps_per_wvl=12),
+        run_time=1e-12,
+        medium=td.Medium(permittivity=4),
+    )
+
+    bounds_uniform = sim_uniform.grid.boundaries.to_list
+    bounds_auto = sim_auto.grid.boundaries.to_list
+
+    for b_uniform, b_auto in zip(bounds_uniform, bounds_auto):
+        assert np.allclose(b_uniform, b_auto)
