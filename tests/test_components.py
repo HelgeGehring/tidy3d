@@ -82,6 +82,13 @@ def test_sim():
     sim.discretize(m)
     sim.epsilon(m)
 
+    sim_hybridPML = sim.copy()
+    sim_hybridPML.boundary_spec = BoundarySpec(
+            x=Boundary.pml(num_layers=20),
+            y=Boundary.stable_pml(num_layers=30),
+            z=Boundary.hybrid_pml(num_layers=30,num_absorber_layers=10),
+        )
+
 
 def _test_version():
     """ensure there's a version in simulation"""

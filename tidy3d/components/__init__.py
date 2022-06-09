@@ -38,5 +38,5 @@ from .data import ModeFieldData, PermittivityData, ScalarPermittivityData
 # boundary
 from .boundary import BoundarySpec, Boundary, BoundaryEdge, BoundaryEdgeType
 from .boundary import BlochBoundary, Symmetry, Periodic, PECBoundary, PMCBoundary
-from .boundary import PML, StablePML, Absorber, PMLParams, AbsorberParams, PMLTypes
+from .boundary import PML, StablePML, Absorber, PMLParams, AbsorberParams, PMLTypes, HybridPML, HybridPMLParams
 from .boundary import DefaultPMLParameters, DefaultStablePMLParameters, DefaultAbsorberParameters

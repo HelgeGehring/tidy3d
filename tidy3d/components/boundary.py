@@ -201,6 +201,18 @@ class PMLParams(AbsorberParams):
         1.5, title="Alpha Maximum", description="Maximum value of the PML alpha.", units=PML_SIGMA
     )
 
+class HybridPMLParams(PMLParams):
+    """Specifies full set of parameters needed for hybrid PML.
+
+    Example
+    -------
+    >>> params = HybridPMLParams(sigma_order=3, sigma_min=0.0, sigma_max=1.5, kappa_min=0.0)
+    """
+    num_absorber_layers: pd.NonNegativeInt = pd.Field(
+        10,
+        title="Number of absorber layers",
+        description="Number of absorber layers.",
+    )
 
 """ Default absorber parameters """
 
@@ -227,7 +239,18 @@ DefaultStablePMLParameters = PMLParams(
     alpha_min=0.0,
     alpha_max=0.9,
 )
-
+DefaultHybridPMLParameters = HybridPMLParams(
+    sigma_order=3,
+    sigma_min=0.0,
+    sigma_max=1.5,
+    kappa_order=3,
+    kappa_min=1.0,
+    kappa_max=3.0,
+    alpha_order=1,
+    alpha_min=0.0,
+    alpha_max=0.0,
+    num_absorber_layers=10,
+)
 
 """ Absorber specifications """
 
@@ -264,6 +287,27 @@ class PML(AbsorberSpec):
     parameters: PMLParams = pd.Field(
         DefaultPMLParameters,
         title="PML Parameters",
+        description="Parameters of the complex frequency-shifted absorption poles.",
+    )
+
+
+class HybridPML(PML):
+    """Specifies a hybrid PML made of a standard PML and an absorber
+
+    Example
+    -------
+    >>> pml = HybridPML(num_layers=20)
+    """
+
+    num_layers: pd.NonNegativeInt = pd.Field(
+        22,
+        title="Total number of Layers",
+        description="Total number of layers of hybrid PML.",
+    )
+
+    parameters: HybridPMLParams = pd.Field(
+        DefaultHybridPMLParameters,
+        title="Hybrid PML Parameters",
         description="Parameters of the complex frequency-shifted absorption poles.",
     )
 
@@ -312,7 +356,7 @@ class Absorber(AbsorberSpec):
 
 
 # pml types allowed in simulation init
-PMLTypes = Union[PML, StablePML, Absorber, None]
+PMLTypes = Union[PML, StablePML, HybridPML, Absorber, None]
 
 
 # """ boundary specification classes """
@@ -321,7 +365,7 @@ PMLTypes = Union[PML, StablePML, Absorber, None]
 
 Symmetry = Literal[0, -1, 1]
 BoundaryEdgeType = Union[
-    Periodic, PECBoundary, PMCBoundary, PML, StablePML, Absorber, BlochBoundary
+    Periodic, PECBoundary, PMCBoundary, PML, StablePML, HybridPML, Absorber, BlochBoundary
 ]
 
 
@@ -346,6 +390,16 @@ class Boundary(Tidy3dBaseModel):
     )
 
     @pd.root_validator
+    def hybrid_pml_nonnegative_pml_layers(cls, values):
+        """Error if negative number of PML layers in HybridPML."""
+
+        boundary_layers = [values.get(f) for f in ["plus", "minus"]]
+        for f in boundary_layers:
+            if isinstance(f, HybridPML) and f.num_layers < f.parameters.num_absorber_layers:
+                raise SetupError("Number of standard PML layers is negative.")
+        return values
+
+    @pd.root_validator
     def bloch_on_both_sides(cls, values):
         """Error if a Bloch boundary is applied on only one side."""
         plus = values.get("plus")
@@ -363,8 +417,8 @@ class Boundary(Tidy3dBaseModel):
         plus = values.get("plus")
         minus = values.get("minus")
         num_pbc = isinstance(plus, Periodic) + isinstance(minus, Periodic)
-        num_pml = isinstance(plus, (PML, StablePML, Absorber)) + isinstance(
-            minus, (PML, StablePML, Absorber)
+        num_pml = isinstance(plus, (PML, HybridPML, StablePML, Absorber)) + isinstance(
+            minus, (PML, HybridPML, StablePML, Absorber)
         )
         if num_pbc == 1 and num_pml == 1:
             raise SetupError("Cannot have both PML and PBC along the same dimension.")
@@ -498,6 +552,33 @@ class Boundary(Tidy3dBaseModel):
         """
         plus = PML(num_layers=num_layers, parameters=parameters)
         minus = PML(num_layers=num_layers, parameters=parameters)
+        return cls(plus=plus, minus=minus)
+
+    @classmethod
+    def hybrid_pml(
+        cls,
+        num_layers: pd.NonNegativeInt = 12,
+        parameters: PMLParams = DefaultHybridPMLParameters,
+    ):
+        """HybridPML boundary specification on both sides along a dimension.
+
+        Parameters
+        ----------
+        num_layers : int = 12
+            Total number of layers of standard PML to add to + and - boundaries.
+        parameters : :class:`PMLParams`
+            Parameters of the complex frequency-shifted absorption poles.
+
+        Example
+        -------
+        >>> pml = Boundary.hybrid_pml(num_layers=22,num_absorber_layers=10)
+        """
+        plus = HybridPML(
+            num_layers=num_layers, parameters=parameters
+        )
+        minus = HybridPML(
+            num_layers=num_layers, parameters=parameters
+        )
         return cls(plus=plus, minus=minus)
 
     @classmethod

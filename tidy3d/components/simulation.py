@@ -18,7 +18,7 @@ from .types import Ax, Shapely, FreqBound, GridSize, Axis
 from .grid import Coords1D, Grid, Coords, GridSpec, UniformGrid
 from .medium import Medium, MediumType, AbstractMedium, PECMedium
 from .boundary import BoundarySpec, Symmetry, BlochBoundary, PECBoundary, PMCBoundary
-from .boundary import PML, StablePML, Absorber
+from .boundary import PML, StablePML, Absorber, HybridPML
 from .structure import Structure
 from .source import SourceType, PlaneWave, GaussianBeam, AstigmaticGaussianBeam
 from .monitor import MonitorType, Monitor, FreqMonitor, AbstractFieldMonitor
@@ -352,7 +352,7 @@ class Simulation(Box):  # pylint:disable=too-many-public-methods
                 zipped = zip(["x", "y", "z"], sim_bound_min, struct_bound_min, boundaries)
                 for axis, sim_val, struct_val, boundary in zipped:
                     # The test is required only for PML and stable PML
-                    if not isinstance(boundary[0], (PML, StablePML)):
+                    if not isinstance(boundary[0], (PML, StablePML, HybridPML)):
                         continue
                     if (
                         boundary[0].num_layers > 0
@@ -364,7 +364,7 @@ class Simulation(Box):  # pylint:disable=too-many-public-methods
                 zipped = zip(["x", "y", "z"], sim_bound_max, struct_bound_max, boundaries)
                 for axis, sim_val, struct_val, boundary in zipped:
                     # The test is required only for PML and stable PML
-                    if not isinstance(boundary[1], (PML, StablePML)):
+                    if not isinstance(boundary[1], (PML, StablePML, HybridPML)):
                         continue
                     if (
                         boundary[1].num_layers > 0
@@ -1038,7 +1038,7 @@ class Simulation(Box):  # pylint:disable=too-many-public-methods
 
         for idx_i, boundary1d in enumerate(self.boundary_spec.to_list):
             for idx_j, boundary in enumerate(boundary1d):
-                if isinstance(boundary, (PML, StablePML, Absorber)):
+                if isinstance(boundary, (PML, StablePML, Absorber, HybridPML)):
                     num_layers[idx_i][idx_j] = boundary.num_layers
 
         return num_layers

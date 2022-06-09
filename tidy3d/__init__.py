@@ -48,7 +48,7 @@ from .components import ScalarPermittivityData
 # boundary
 from .components import BoundarySpec, Boundary, BoundaryEdge, BoundaryEdgeType
 from .components import BlochBoundary, Symmetry, Periodic, PECBoundary, PMCBoundary
-from .components import PML, StablePML, Absorber, PMLParams, AbsorberParams, PMLTypes
+from .components import PML, StablePML, Absorber, PMLParams, HybridPMLParams, AbsorberParams, PMLTypes, HybridPML
 from .components import DefaultPMLParameters, DefaultStablePMLParameters, DefaultAbsorberParameters
 
 # constants imported as `C_0 = td.C_0` or `td.constants.C_0`
