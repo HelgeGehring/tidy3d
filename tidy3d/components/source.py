@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Union, Tuple
 import logging
 
-from typing_extensions import Literal
+from typing_extensions import Annotated, Literal
 import pydantic
 import numpy as np
 
@@ -669,6 +669,14 @@ class TFSF(AngledFieldSource, VolumeSource):
 
 
 # sources allowed in Simulation.sources
-SourceType = Union[
-    UniformCurrentSource, PointDipole, GaussianBeam, AstigmaticGaussianBeam, ModeSource, PlaneWave
+SourceType = Annotated[
+    Union[
+        UniformCurrentSource,
+        PointDipole,
+        GaussianBeam,
+        AstigmaticGaussianBeam,
+        ModeSource,
+        PlaneWave,
+    ],
+    pydantic.Field(discriminator="type"),
 ]
