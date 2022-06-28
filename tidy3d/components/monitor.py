@@ -1,6 +1,7 @@
 """Objects that define how data is recorded from simulation."""
 from abc import ABC, abstractmethod
 from typing import List, Union, Tuple
+from typing_extensions import Annotated
 
 import pydantic
 import numpy as np
@@ -475,12 +476,15 @@ class ModeFieldMonitor(AbstractModeMonitor):
 
 
 # types of monitors that are accepted by simulation
-MonitorType = Union[
-    FieldMonitor,
-    FieldTimeMonitor,
-    PermittivityMonitor,
-    FluxMonitor,
-    FluxTimeMonitor,
-    ModeMonitor,
-    ModeFieldMonitor,
+MonitorType = Annotated[
+    Union[
+        FieldMonitor,
+        FieldTimeMonitor,
+        PermittivityMonitor,
+        FluxMonitor,
+        FluxTimeMonitor,
+        ModeMonitor,
+        ModeFieldMonitor,
+    ],
+    pydantic.Field(discriminator="type"),
 ]
