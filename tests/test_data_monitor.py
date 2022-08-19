@@ -19,6 +19,7 @@ from .test_data_arrays import make_scalar_mode_field_data_array
 from .test_data_arrays import make_flux_data_array, make_flux_time_data_array
 from .test_data_arrays import make_mode_amps_data_array, make_mode_index_data_array
 from .test_data_arrays import FIELD_MONITOR, FIELD_TIME_MONITOR, MODE_SOLVE_MONITOR
+from .test_data_arrays import FIELD_MONITOR_2D, FIELD_TIME_MONITOR_2D
 from .test_data_arrays import MODE_MONITOR, PERMITTIVITY_MONITOR, FLUX_MONITOR, FLUX_TIME_MONITOR
 from .utils import clear_tmp
 
@@ -37,6 +38,7 @@ def make_field_data(symmetry: bool = True):
         Ex=make_scalar_field_data_array("Ex", symmetry),
         Ey=make_scalar_field_data_array("Ey", symmetry),
         Ez=make_scalar_field_data_array("Ez", symmetry),
+        Hx=make_scalar_field_data_array("Hx", symmetry),
         Hz=make_scalar_field_data_array("Hz", symmetry),
     )
 
@@ -47,7 +49,30 @@ def make_field_time_data(symmetry: bool = True):
         Ex=make_scalar_field_time_data_array("Ex", symmetry),
         Ey=make_scalar_field_time_data_array("Ey", symmetry),
         Ez=make_scalar_field_time_data_array("Ez", symmetry),
-        Hz=make_scalar_field_time_data_array("Ez", symmetry),
+        Hx=make_scalar_field_time_data_array("Hx", symmetry),
+        Hz=make_scalar_field_time_data_array("Hz", symmetry),
+    )
+
+
+def make_field_data_2d(symmetry: bool = True):
+    return FieldData(
+        monitor=FIELD_MONITOR_2D,
+        Ex=make_scalar_field_data_array("Ex", symmetry).isel(y=[0]),
+        Ey=make_scalar_field_data_array("Ey", symmetry).isel(y=[0]),
+        Ez=make_scalar_field_data_array("Ez", symmetry).isel(y=[0]),
+        Hx=make_scalar_field_data_array("Hx", symmetry).isel(y=[0]),
+        Hz=make_scalar_field_data_array("Hz", symmetry).isel(y=[0]),
+    )
+
+
+def make_field_time_data_2d(symmetry: bool = True):
+    return FieldTimeData(
+        monitor=FIELD_TIME_MONITOR_2D,
+        Ex=make_scalar_field_time_data_array("Ex", symmetry).isel(y=[0]),
+        Ey=make_scalar_field_time_data_array("Ey", symmetry).isel(y=[0]),
+        Ez=make_scalar_field_time_data_array("Ez", symmetry).isel(y=[0]),
+        Hx=make_scalar_field_time_data_array("Hx", symmetry).isel(y=[0]),
+        Hz=make_scalar_field_time_data_array("Hz", symmetry).isel(y=[0]),
     )
 
 
@@ -89,15 +114,19 @@ def make_flux_time_data():
 
 
 def test_field_data():
-    data = make_field_data()
+    data = make_field_data_2d()
     for field in FIELD_MONITOR.fields:
         _ = getattr(data, field)
+    flux1 = np.abs(data.flux)
+    flux2 = np.abs(data.dot(data))
+    assert np.all(flux1 == flux2)
 
 
 def test_field_time_data():
-    data = make_field_time_data()
+    data = make_field_time_data_2d()
     for field in FIELD_TIME_MONITOR.fields:
         _ = getattr(data, field)
+    flux1 = np.abs(data.flux)
 
 
 def test_mode_field_data():
@@ -105,6 +134,9 @@ def test_mode_field_data():
     for field in "EH":
         for component in "xyz":
             _ = getattr(data, field + component)
+    flux1 = np.abs(data.flux)
+    flux2 = np.abs(data.dot(data))
+    assert np.all(flux1 == flux2)
 
 
 def test_permittivity_data():
@@ -133,18 +165,18 @@ def test_colocate():
     # TODO: can we colocate into regions where we dont store fields due to symmetry?
     # regular colocate
     data = make_field_data()
-    _ = data.colocate(x=[+0.1, 0.5], y=[+0.1, 0.5], z=[+0.1, 0.5])
+    _ = data.colocate(z=[+0.1, 0.5])
 
     # ignore coordinate
-    _ = data.colocate(x=[+0.1, 0.5], y=None, z=[+0.1, 0.5])
+    _ = data.colocate(y=None, z=[+0.1, 0.5])
 
     # data outside range of len(coord)==1 dimension
     data = make_mode_solver_data()
     with pytest.raises(DataError):
-        _ = data.colocate(x=[+0.1, 0.5], y=1.0, z=[+0.1, 0.5])
+        _ = data.colocate(y=1.0, z=[+0.1, 0.5])
 
     with pytest.raises(DataError):
-        _ = data.colocate(x=[+0.1, 0.5], y=[1.0, 2.0], z=[+0.1, 0.5])
+        _ = data.colocate(y=[1.0, 2.0], z=[+0.1, 0.5])
 
 
 def test_sel_mode_index():
