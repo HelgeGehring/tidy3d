@@ -350,7 +350,9 @@ class Grid(Tidy3dBaseModel):
             inds_leq_pt_min = np.where(bound_coords <= pt_min)[0]
             ind_min = 0 if len(inds_leq_pt_min) == 0 else inds_leq_pt_min[-1]
 
-            if extend and ind_max > ind_min:
+            # Extend the grid if requested, if ind_min:ind_max is none-empty, and if the grid is
+            # not single-pixel along the give dimension, i.e. corresponding to a 2D simulation
+            if extend and ind_max > ind_min and len(bound_coords) > 2:
                 # If the box bounds on the left side are to the left of the closest grid center,
                 # we need an extra pixel to be able to interpolate the center components.
                 if box.bounds[0][axis] < self.centers.to_list[axis][ind_min]:

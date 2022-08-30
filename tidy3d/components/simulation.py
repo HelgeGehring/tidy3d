@@ -1725,12 +1725,16 @@ class Simulation(Box):  # pylint:disable=too-many-public-methods
         if not self.intersects(box):
             log.error(f"Box {box} is outside simulation, cannot discretize")
 
-        span_inds = self.grid.discretize_inds(box, extend=extend)
         boundary_dict = {}
         for idim, dim in enumerate("xyz"):
-            if snap_zero_dim and box.size[idim] == 0:
+            if self.grid.num_cells[idim] == 1:
+                # 2D simulation, i.e. one pixel only along current dimension
+                boundary_dict[dim] = [self.center[idim], self.center[idim]]
+            elif snap_zero_dim and box.size[idim] == 0:
+                # 2D geometry, snap grid to geometry center if requested
                 boundary_dict[dim] = [box.center[idim], box.center[idim]]
             else:
+                span_inds = self.grid.discretize_inds(box, extend=extend)
                 ind_beg, ind_end = span_inds[idim]
                 # ind_end + 1 because we are selecting cell boundaries not cells
                 boundary_dict[dim] = self.grid.periodic_subspace(idim, ind_beg, ind_end + 1)
