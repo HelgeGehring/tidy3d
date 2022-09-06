@@ -59,11 +59,11 @@ def get_credentials() -> None:
         email = os.environ["TIDY3D_USER"]
         password = os.environ.get("TIDY3D_PASS")
         if password is None:
-            password = os.environ.get("TIDY3D_PASS_HASH")
+            auth_password = os.environ.get("TIDY3D_PASS_HASH")
         else:
-            password = encode_password(password)
+            auth_password = encode_password(password)
         try:
-            set_authentication_config(email, password)
+            set_authentication_config(email, auth_password)
             return
 
         except Exception:  # pylint:disable=broad-except

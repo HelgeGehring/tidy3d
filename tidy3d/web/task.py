@@ -39,24 +39,24 @@ class TaskInfo(TaskBase):
     """general information about task"""
 
     taskId: str
-    taskName: str = None
-    nodeSize: int = None
+    taskName: Optional[str] = None
+    nodeSize: Optional[int] = None
     completedAt: Optional[datetime] = None
-    status: str = None
-    realCost: float = None
-    timeSteps: int = None
-    solverVersion: str = None
+    status: Optional[str] = None
+    realCost: Optional[float] = None
+    timeSteps: Optional[int] = None
+    solverVersion: Optional[str] = None
     createAt: Optional[datetime] = None
-    estCostMin: float = None
-    estCostMax: float = None
-    realFlexUnit: float = None
-    estFlexUnit: float = None
-    s3Storage: float = None
+    estCostMin: Optional[float] = None
+    estCostMax: Optional[float] = None
+    realFlexUnit: Optional[float] = None
+    estFlexUnit: Optional[float] = None
+    s3Storage: Optional[float] = None
     startSolverTime: Optional[datetime] = None
     finishSolverTime: Optional[datetime] = None
-    totalSolverTime: int = None
-    callbackUrl: str = None
-    taskType: str = None
+    totalSolverTime: Optional[int] = None
+    callbackUrl: Optional[str] = None
+    taskType: Optional[str] = None
 
 
 class RunInfo(TaskBase):
@@ -76,8 +76,8 @@ class Folder(pydantic.BaseModel):
     Folder information of a task
     """
 
-    projectName: str = None
-    projectId: str = None
+    projectName: Optional[str] = None
+    projectId: Optional[str] = None
 
     class Config:
         """configure class"""

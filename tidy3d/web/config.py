@@ -1,5 +1,5 @@
 """ sets configuration options for web interface """
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 import pydantic as pd
 
 
@@ -11,10 +11,10 @@ class WebConfig(pd.BaseModel):  # pylint:disable=too-many-instance-attributes
     auth_api_endpoint: str
     web_api_endpoint: str
     website_endpoint: str
-    solver_version: str = None
-    worker_group: Any = None
-    auth: str = None
-    user: Dict[str, str] = None
+    solver_version: Optional[str] = None
+    worker_group: Optional[Any] = None
+    auth: Optional[Dict[str, str]] = None
+    user: Optional[Dict[str, str]] = None
     auth_retry: int = 1
 
 

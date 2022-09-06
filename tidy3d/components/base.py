@@ -15,8 +15,8 @@ import h5py
 import xarray as xr
 from dask.base import tokenize
 
-from .types import ComplexNumber, Literal, TYPE_TAG_STR  # , DataObject
-from ..log import FileError, log, Tidy3dKeyError
+from .types import ComplexNumber, Literal, TYPE_TAG_STR
+from ..log import FileError, log, Tidy3dKeyError, Tidy3dError
 
 # default indentation (# spaces) in files
 INDENT = 4
@@ -159,7 +159,7 @@ class Tidy3dBaseModel(pydantic.BaseModel):
             if value == "-Infinity":
                 value = -np.inf
             if isinstance(value, dict) and "real" in value and "imag" in value:
-                value = value.get("real") + 1j * value.get("imag")
+                value = value["real"] + 1j * value["imag"]
             return value
 
         def construct_value(name: str, value: Any) -> Any:
@@ -175,7 +175,10 @@ class Tidy3dBaseModel(pydantic.BaseModel):
 
                 # grab the type and load the data without validation using that type
                 model_type = get_cls_type(value, outer_type, model_type)
-                return model_type.load_without_validation(**value)
+                if issubclass(model_type, Tidy3dBaseModel):
+                    return model_type.load_without_validation(**value)
+                else:
+                    raise Tidy3dError(f"Could not load {model_type} without vaidation.")
 
             # if the type of the field is a tuple and the supplied value is not None
             if (
@@ -474,7 +477,7 @@ class Tidy3dBaseModel(pydantic.BaseModel):
     @classmethod
     def _load_group_data(
         cls, data_dict: dict, hdf5_group: h5py.Group, keep_numpy: bool = False
-    ) -> dict:
+    ) -> Union[dict, tuple]:
         """Recusively load the data from the group with dataset unpacking as base case."""
 
         if "keep_numpy" in hdf5_group:
@@ -501,7 +504,7 @@ class Tidy3dBaseModel(pydantic.BaseModel):
         return data_dict
 
     @classmethod
-    def hdf5_to_dict(cls, fname: str) -> dict:
+    def hdf5_to_dict(cls, fname: str) -> Union[dict, tuple]:
         """Load an hdf5 file into a dictionary storing its unpacked contents.
 
         Parameters
@@ -511,8 +514,9 @@ class Tidy3dBaseModel(pydantic.BaseModel):
 
         Returns
         -------
-        dict
+        Union[dict, tuple]
             The dictionary containing all group names as keys and datasets as values.
+            If the value contains only a tuple, returns that.
         """
 
         # open the file and load its data recursively into a dictionary
@@ -694,7 +698,7 @@ class Tidy3dBaseModel(pydantic.BaseModel):
             original_docstrings = cls.__doc__.split("\n\n")
             class_description = original_docstrings.pop(0)
             doc += class_description
-        original_docstrings = "\n\n".join(original_docstrings)
+        original_docstring = "\n\n".join(original_docstrings)
 
         # create the list of parameters (arguments) for the model
         doc += "\n\n    Parameters\n    ----------\n"
@@ -742,12 +746,13 @@ class Tidy3dBaseModel(pydantic.BaseModel):
                 doc += f"{description_str}\n"
 
         # add in remaining things in the docs
-        if original_docstrings:
+        if original_docstring:
             doc += "\n"
-            doc += original_docstrings
+            doc += original_docstring
 
         doc += "\n"
         cls.__doc__ = doc
+        return doc
 
 
 def cache(prop):

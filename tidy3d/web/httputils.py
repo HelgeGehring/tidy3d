@@ -71,11 +71,11 @@ def need_token_refresh(token: str) -> bool:
 
 def get_headers() -> Dict[str, str]:
     """get headers for http request"""
-    if Config.auth is None or Config.auth["accessToken"] is None:
+    if Config.auth is None or Config.auth.get("accessToken") is None:
         get_credentials()
-    elif need_token_refresh(Config.auth["accessToken"]):
+    elif need_token_refresh(Config.auth.get("accessToken")):
         get_credentials()
-    access_token = Config.auth["accessToken"]
+    access_token = Config.auth.get("accessToken")
     return {
         "Authorization": f"Bearer {access_token}",
         "Application": "TIDY3D",

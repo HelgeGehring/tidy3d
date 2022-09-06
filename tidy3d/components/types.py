@@ -1,11 +1,11 @@
 """ Defines 'types' that various fields can be """
-
+import sys
 from typing import Tuple, Union
 
-# Literal only available in python 3.8 + so try import otherwise use extensions
-try:
+# Literal only available in python 3.8
+if sys.version_info >= (3, 8):
     from typing import Literal
-except ImportError:
+else:
     from typing_extensions import Literal
 from typing_extensions import Annotated
 

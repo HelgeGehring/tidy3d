@@ -223,7 +223,7 @@ class Geometry(Tidy3dBaseModel, ABC):
     @classmethod
     def strip_coords(
         cls, shape: Shapely
-    ) -> Tuple[List[float], List[float], Tuple[List[float], List[float]]]:
+    ) -> Tuple[Tuple[List[float], List[float]], List[Tuple[List[float], List[float]]]]:
         """Get the exterior and list of interior xy coords for a shape.
 
         Parameters
@@ -233,7 +233,7 @@ class Geometry(Tidy3dBaseModel, ABC):
 
         Returns
         -------
-        Tuple[List[float], List[float], Tuple[List[float], List[float]]]
+        Tuple[Tuple[List[float], List[float]], List[Tuple[List[float], List[float]]]]
             List of exterior xy coordinates
             and a list of lists of the interior xy coordinates of the "holes" in the shape.
         """
@@ -298,7 +298,7 @@ class Geometry(Tidy3dBaseModel, ABC):
         str, str
             Labels of plot, packaged as ``(xlabel, ylabel)``.
         """
-        _, (xlabel, ylabel) = self.pop_axis("xyz", axis=axis)
+        _, (xlabel, ylabel) = self.pop_axis(("x","y","z"), axis=axis)
         return xlabel, ylabel
 
     def _get_plot_limits(
@@ -381,7 +381,8 @@ class Geometry(Tidy3dBaseModel, ABC):
         """
         plane_vals = list(coord)
         axis_val = plane_vals.pop(axis)
-        return axis_val, tuple(plane_vals)
+        plane_val1, plane_val2 = plane_vals
+        return axis_val, (plane_val1, plane_val2)
 
     @staticmethod
     def unpop_axis(ax_coord: Any, plane_coords: Tuple[Any, Any], axis: int) -> Tuple[Any, Any, Any]:
@@ -403,7 +404,8 @@ class Geometry(Tidy3dBaseModel, ABC):
         """
         coords = list(plane_coords)
         coords.insert(axis, ax_coord)
-        return tuple(coords)
+        val1, val2, val3 = coords
+        return (val1, val2, val3)
 
     @staticmethod
     def parse_xyz_kwargs(**xyz) -> Tuple[Axis, float]:
@@ -424,10 +426,11 @@ class Geometry(Tidy3dBaseModel, ABC):
             Index into xyz axis (0,1,2) and position along that axis.
         """
         xyz_filtered = {k: v for k, v in xyz.items() if v is not None}
-        assert len(xyz_filtered) == 1, "exatly one kwarg in [x,y,z] must be specified."
+        if len(xyz_filtered) != 1:
+            raise ValueError("exatly one kwarg in [x,y,z] must be specified.")
         axis_label, position = list(xyz_filtered.items())[0]
         axis = "xyz".index(axis_label)
-        return axis, position
+        return axis, float(position)
 
     @staticmethod
     def rotate_points(
@@ -494,11 +497,13 @@ class Geometry(Tidy3dBaseModel, ABC):
         """
 
         # Rotate such that the plane normal is along the polar_axis
-        axis_theta, axis_phi = [0, 0, 0], [0, 0, 0]
-        axis_phi[polar_axis] = 1
+        axis_theta, axis_phi = [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]
+        axis_phi[polar_axis] = 1.0
         plane_axes = [0, 1, 2]
         plane_axes.pop(polar_axis)
-        axis_theta[plane_axes[1]] = 1
+        axis_theta[plane_axes[1]] = 1.0
+        axis_theta = tuple(axis_theta)
+        axis_phi = tuple(axis_phi)
         points_new = self.rotate_points(points, axis_phi, -angle_phi)
         points_new = self.rotate_points(points_new, axis_theta, -angle_theta)
 
@@ -697,9 +702,9 @@ class Planar(Geometry, ABC):
         ``(Any, Any)``
             The two planar coordinates in this new coordinate system.
         """
-        vals = 3 * [plane_val]
+        vals = [plane_val, plane_val, plane_val]
         vals[self.axis] = axis_val
-        _, (val_x, val_y) = self.pop_axis(vals, axis=axis)
+        _, (val_x, val_y) = self.pop_axis(tuple(vals), axis=axis)
         return val_x, val_y
 
 
@@ -717,7 +722,7 @@ class Circular(Geometry):
             raise ValidationError("radius can not be td.inf.")
         return val
 
-    def _intersect_dist(self, position, z0) -> float:
+    def _intersect_dist(self, position, z0) -> Union[float, None]:
         """Distance between points on circle at z=position where center of circle at z=z0.
 
         Parameters
@@ -793,7 +798,7 @@ class Box(Centered):
         return cls(center=center, size=size, **kwargs)
 
     @classmethod
-    def surfaces(cls, size: Size, center: Coordinate, **kwargs):  # pylint: disable=too-many-locals
+    def surfaces(cls, size: Size, center: Coordinate, name : str = "", **kwargs):  # pylint: disable=too-many-locals
         """Returns a list of 6 :class:`Box` instances corresponding to each surface of a 3D volume.
         The output surfaces are stored in the order [x-, x+, y-, y+, z-, z+], where x, y, and z
         denote which axis is perpendicular to that surface, while "-" and "+" denote the direction
@@ -843,7 +848,6 @@ class Box(Centered):
             (size_x, size_y, 0.0),  # z+
         )
 
-        name = kwargs.pop("name", "")
         surface_names = (
             name + "_x-",
             name + "_x+",
@@ -1041,7 +1045,7 @@ class Box(Centered):
     ) -> Tuple[float, float]:
         """Length and width of arrow based on axes size and length and width factors."""
 
-        if sim_bounds is not None:
+        if sim_bounds is not None and plot_axis is not None:
 
             # use the sim_bounds to get sizes
             rmin, rmax = sim_bounds
@@ -1344,7 +1348,7 @@ class Cylinder(Centered, Circular, Planar):
     def _surface_area(self, bounds: Bound) -> float:
         """Returns object's surface area given bounds."""
 
-        area = 0
+        area = 0.0
 
         coord_min = self.bounds[0][self.axis]
         coord_max = self.bounds[1][self.axis]
@@ -1941,7 +1945,7 @@ class PolySlab(Planar):
 
     def _find_intersecting_ys_angle_vertical(  # pylint:disable=too-many-locals
         self, vertices: np.ndarray, position: float, axis: int, exclude_on_vertices: bool = False
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """Finds pairs of forward and backwards vertices where polygon intersects position at axis,
         Find intersection point (in y) assuming straight line,and intersecting angle between plane
         and edges. (For unslanted polyslab).
@@ -2374,7 +2378,7 @@ class PolySlab(Planar):
     def _surface_area(self, bounds: Bound) -> float:
         """Returns object's surface area given bounds."""
 
-        area = 0
+        area = 0.0
 
         top = self.top_polygon
         base = self.base_polygon

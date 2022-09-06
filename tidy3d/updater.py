@@ -1,4 +1,6 @@
 """Utilities for converting between tidy3d versions."""
+from __future__ import annotations
+
 from typing import Dict, Callable
 import json
 import functools
@@ -20,7 +22,7 @@ class Version(pd.BaseModel):
     minor: int
 
     @classmethod
-    def from_string(cls, string=None) -> "Version":
+    def from_string(cls, string=None) -> Version:
         """Return Version from a version string."""
         if string is None:
             return cls.from_string(string=__version__)
@@ -85,7 +87,7 @@ class Updater(pd.BaseModel):
     sim_dict: dict
 
     @classmethod
-    def from_file(cls, fname: str) -> "Updater":
+    def from_file(cls, fname: str) -> Updater:
         """Dictionary representing the simulation loaded from file."""
 
         if ".hdf5" in fname:
@@ -106,7 +108,7 @@ class Updater(pd.BaseModel):
         return cls(sim_dict=sim_dict)
 
     @classmethod
-    def from_string(cls, sim_dict_str: str) -> "Updater":
+    def from_string(cls, sim_dict_str: str) -> Updater:
         """Dictionary representing the simulation loaded from string."""
         sim_dict = json.loads(sim_dict_str)
         return cls(sim_dict=sim_dict)
@@ -127,11 +129,11 @@ class Updater(pd.BaseModel):
         update_version = max(leq_versions)
         return UPDATE_MAP[update_version]
 
-    def get_next_version(self) -> Version:
+    def get_next_version(self) -> str:
         """Get the next version after self.version."""
         gt_versions = [v for v in UPDATE_MAP if v > self.version]
         if not gt_versions:
-            return CurrentVersion
+            return str(CurrentVersion)
         return str(min(gt_versions))
 
     def update_to_current(self) -> dict:
@@ -198,12 +200,12 @@ def iterate_update_dict(update_dict: Dict, update_types: Dict[str, Callable]):
 def update_1_4(sim_dict: dict) -> dict:
     """Updates version 1.3 to 1.4."""
 
-    def fix_polyslab(geo_dict):
+    def fix_polyslab(geo_dict: dict) -> None:
         """Fix a PolySlab dictionary."""
         geo_dict.pop("length", None)
         geo_dict.pop("center", None)
 
-    def fix_modespec(ms_dict):
+    def fix_modespec(ms_dict: dict) -> None:
         """Fix a ModeSpec dictionary."""
         sort_by = ms_dict.pop("sort_by", None)
         if sort_by != "largest_neff":
@@ -212,7 +214,7 @@ def update_1_4(sim_dict: dict) -> dict:
                 "largest effective index. Use ModeSpec.filter_pol to select polarization instead."
             )
 
-    def fix_geometry_group(geo_dict):
+    def fix_geometry_group(geo_dict: dict) -> None:
         """Fix a GeometryGroup dictionary."""
         geo_dict.pop("center", None)
 
