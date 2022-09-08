@@ -181,6 +181,13 @@ class Simulation(Box):  # pylint:disable=too-many-public-methods
         "based on structure definition, resulting in much higher accuracy for a given grid size.",
     )
 
+    extend_structures: bool = pydantic.Field(
+        True,
+        title="Extend structures through boundaries",
+        description="If ``True``, extend any structures that touch the boundary beyond "
+        "simulation boundaries."
+    )
+    
     normalize_index: Union[pydantic.NonNegativeInt, None] = pydantic.Field(
         0,
         title="Normalization index",
