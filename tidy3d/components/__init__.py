@@ -32,20 +32,20 @@ from .monitor import Near2FarAngleMonitor, Near2FarCartesianMonitor, Near2FarKSp
 from .simulation import Simulation
 
 # data
-from .data import ScalarFieldDataArray, ScalarModeFieldDataArray, ScalarFieldTimeDataArray
-from .data import ModeAmpsDataArray, ModeIndexDataArray
-from .data import FluxDataArray, FluxTimeDataArray
-from .data import AbstractNear2FarData
-from .data import Near2FarAngleDataArray, Near2FarCartesianDataArray, Near2FarKSpaceDataArray
+# from .data import ScalarFieldDataArray, ScalarModeFieldDataArray, ScalarFieldTimeDataArray
+# from .data import ModeAmpsDataArray, ModeIndexDataArray
+# from .data import FluxDataArray, FluxTimeDataArray
+# from .data import AbstractNear2FarData
+# from .data import Near2FarAngleDataArray, Near2FarCartesianDataArray, Near2FarKSpaceDataArray
 
-from .data import FieldData, FieldTimeData, PermittivityData
-from .data import FluxData, FluxTimeData
-from .data import ModeData, ModeSolverData
-from .data import Near2FarAngleData, Near2FarCartesianData, Near2FarKSpaceData
-from .data import Near2FarSurface, RadiationVectors
+# from .data import FieldData, FieldTimeData, PermittivityData
+# from .data import FluxData, FluxTimeData
+# from .data import ModeData, ModeSolverData
+# from .data import Near2FarAngleData, Near2FarCartesianData, Near2FarKSpaceData
+# from .data import Near2FarSurface, RadiationVectors
 
-from .data import SimulationData
-from .data import DATA_TYPE_MAP
+# from .data import SimulationData
+# from .data import DATA_TYPE_MAP
 
 # boundary
 from .boundary import BoundarySpec, Boundary, BoundaryEdge, BoundaryEdgeType

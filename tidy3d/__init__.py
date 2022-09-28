@@ -1,5 +1,5 @@
 """ Tidy3d package imports"""
-from concurrent.futures import ProcessPoolExecutor, process
+# from concurrent.futures import ProcessPoolExecutor, process
 
 from rich import pretty, traceback
 
@@ -33,18 +33,18 @@ from .components import Near2FarAngleMonitor, Near2FarCartesianMonitor, Near2Far
 from .components import Simulation
 
 # data
-from .components import ScalarFieldDataArray, ScalarModeFieldDataArray, ScalarFieldTimeDataArray
-from .components import ModeAmpsDataArray, ModeIndexDataArray
-from .components import FluxDataArray, FluxTimeDataArray
-from .components import Near2FarAngleDataArray, Near2FarCartesianDataArray, Near2FarKSpaceDataArray
-from .components import FieldData, FieldTimeData, PermittivityData
-from .components import FluxData, FluxTimeData
-from .components import ModeData, ModeSolverData
-from .components import AbstractNear2FarData
-from .components import Near2FarAngleData, Near2FarCartesianData, Near2FarKSpaceData
-from .components import Near2FarSurface, RadiationVectors
-from .components import SimulationData
-from .components import DATA_TYPE_MAP
+# from .components import ScalarFieldDataArray, ScalarModeFieldDataArray, ScalarFieldTimeDataArray
+# from .components import ModeAmpsDataArray, ModeIndexDataArray
+# from .components import FluxDataArray, FluxTimeDataArray
+# from .components import Near2FarAngleDataArray, Near2FarCartesianDataArray, Near2FarKSpaceDataArray
+# from .components import FieldData, FieldTimeData, PermittivityData
+# from .components import FluxData, FluxTimeData
+# from .components import ModeData, ModeSolverData
+# from .components import AbstractNear2FarData
+# from .components import Near2FarAngleData, Near2FarCartesianData, Near2FarKSpaceData
+# from .components import Near2FarSurface, RadiationVectors
+# from .components import SimulationData
+# from .components import DATA_TYPE_MAP
 
 # boundary
 from .components import BoundarySpec, Boundary, BoundaryEdge, BoundaryEdgeType

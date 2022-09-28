@@ -9,11 +9,11 @@ from typing_extensions import _AnnotatedAlias
 import rich
 import pydantic
 from pydantic.fields import ModelField
-import yaml
+# import yaml
 import numpy as np
-import h5py
-import xarray as xr
-from dask.base import tokenize
+# import h5py
+# import xarray as xr
+# from dask.base import tokenize
 
 from .types import ComplexNumber, Literal, TYPE_TAG_STR
 from ..log import FileError, log, Tidy3dKeyError
@@ -63,10 +63,10 @@ class Tidy3dBaseModel(pydantic.BaseModel):
         json_encoders = {
             np.ndarray: lambda x: tuple(x.tolist()),
             complex: lambda x: ComplexNumber(real=x.real, imag=x.imag),
-            xr.DataArray: lambda x: {  # pylint:disable=unhashable-member
-                **x.to_dict(),  # original xarray dict
-                TYPE_TAG_STR: x.__class__.__name__,  # add the type info as well
-            },
+            # xr.DataArray: lambda x: {  # pylint:disable=unhashable-member
+            #     **x.to_dict(),  # original xarray dict
+            #     TYPE_TAG_STR: x.__class__.__name__,  # add the type info as well
+            # },
         }
         frozen = True
         allow_mutation = False
