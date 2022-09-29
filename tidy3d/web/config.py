@@ -18,6 +18,7 @@ class WebConfig(pd.BaseModel):  # pylint:disable=too-many-instance-attributes
     auth: str = None
     user: Dict[str, str] = None
     auth_retry: int = 1
+    ssl_verify: bool = True
 
 
 # development config
@@ -68,4 +69,4 @@ DEFAULT_CONFIG_KEY = "prod"
 env_key = os.environ.get("TIDY3D_ENV")
 config_key = env_key if env_key is not None else DEFAULT_CONFIG_KEY
 DEFAULT_CONFIG = WEB_CONFIGS[config_key]
-DEFAULT_CONFIG.ssl_verify = os.environ.get("TIDY3d_DISABLE_SSL") is None
+DEFAULT_CONFIG.ssl_verify = os.environ.get("TIDY3d_DISABLE_SSL", "false").lower() != "true"
