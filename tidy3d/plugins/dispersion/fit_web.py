@@ -10,6 +10,7 @@ from ...components.types import Literal
 from ...components import PoleResidue
 from ...constants import MICROMETER, HERTZ
 from ...log import log, WebError, Tidy3dError
+from ...web.config import DEFAULT_CONFIG
 from ...web.httputils import get_headers
 
 from .fit import DispersionFitter
@@ -154,14 +155,14 @@ class StableDispersionFitter(DispersionFitter):
         headers = {"Authorization": access_token["Authorization"]}
 
         # test connection
-        resp = requests.get(f"{url_server}/health")
+        resp = requests.get(f"{url_server}/health", verify=DEFAULT_CONFIG.ssl_verify)
         try:
             resp.raise_for_status()
         except Exception as e:
             raise WebError("Connection to the server failed. Please try again.") from e
 
         # test authorization
-        resp = requests.get(f"{url_server}/health/access", headers=headers)
+        resp = requests.get(f"{url_server}/health/access", headers=headers, verify=DEFAULT_CONFIG.ssl_verify)
         try:
             resp.raise_for_status()
         except Exception as e:
@@ -262,7 +263,7 @@ class StableDispersionFitter(DispersionFitter):
         # setup web_data
         web_data = self._setup_webdata(num_poles, num_tries, tolerance_rms, advanced_param)
 
-        resp = requests.post(f"{url_server}/dispersion/fit", headers=headers, data=web_data.json())
+        resp = requests.post(f"{url_server}/dispersion/fit", headers=headers, data=web_data.json(), verify=DEFAULT_CONFIG.ssl_verify)
 
         try:
             resp.raise_for_status()

@@ -6,7 +6,7 @@ import json
 
 import requests
 
-from .config import DEFAULT_CONFIG as Config
+from .config import DEFAULT_CONFIG as Config, DEFAULT_CONFIG
 from ..log import log, WebError
 
 # maximum attempts for credentials input
@@ -24,7 +24,7 @@ def set_authentication_config(email: str, password: str) -> None:
 
     url = "/".join([Config.auth_api_endpoint, "auth"])
     headers = {"Application": "TIDY3D"}
-    resp = requests.get(url, headers=headers, auth=(email, password))
+    resp = requests.get(url, headers=headers, auth=(email, password), verify=DEFAULT_CONFIG.ssl_verify)
     if resp.status_code != 200:
         raise WebError("Failed to log in with username and password.")
     log.info("Authentication successful.")

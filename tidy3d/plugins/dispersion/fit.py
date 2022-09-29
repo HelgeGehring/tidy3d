@@ -646,7 +646,7 @@ class DispersionFitter(Tidy3dBaseModel):
             A :class:`DispersionFitter` instance.
         """
 
-        resp = requests.get(url_file)
+        resp = requests.get(url_file, verify=DEFUALT_CONFIG.)
 
         try:
             resp.raise_for_status()

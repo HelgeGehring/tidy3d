@@ -8,7 +8,7 @@ import jwt
 import requests
 
 from .auth import get_credentials, MAX_ATTEMPTS
-from .config import DEFAULT_CONFIG as Config
+from .config import DEFAULT_CONFIG as Config, DEFAULT_CONFIG
 from ..log import WebError
 
 
@@ -87,7 +87,7 @@ def post(method, data=None):
     """Uploads the file."""
     query_url = get_query_url(method)
     headers = get_headers()
-    return requests.post(query_url, headers=headers, json=data)
+    return requests.post(query_url, headers=headers, json=data, verify=DEFAULT_CONFIG.ssl_verify)
 
 
 @handle_response
@@ -95,7 +95,7 @@ def put(method, data):
     """Runs the file."""
     query_url = get_query_url(method)
     headers = get_headers()
-    return requests.put(query_url, headers=headers, json=data)
+    return requests.put(query_url, headers=headers, json=data, verify=DEFAULT_CONFIG.ssl_verify)
 
 
 @handle_response
@@ -103,7 +103,7 @@ def get(method):
     """Downloads the file."""
     query_url = get_query_url(method)
     headers = get_headers()
-    return requests.get(query_url, headers=headers)
+    return requests.get(query_url, headers=headers, verify=DEFAULT_CONFIG.ssl_verify)
 
 
 @handle_response
@@ -111,4 +111,4 @@ def delete(method):
     """Deletes the file."""
     query_url = get_query_url(method)
     headers = get_headers()
-    return requests.delete(query_url, headers=headers)
+    return requests.delete(query_url, headers=headers, verify=DEFAULT_CONFIG.ssl_verify)
