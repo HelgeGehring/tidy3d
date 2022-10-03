@@ -51,6 +51,7 @@ class _S3STSToken(BaseModel):
         """
         return boto3.client(
             "s3",
+            verify=False,
             region_name=DEFAULT_CONFIG.s3_region,
             aws_access_key_id=self.user_credential.access_key_id,
             aws_secret_access_key=self.user_credential.secret_access_key,
