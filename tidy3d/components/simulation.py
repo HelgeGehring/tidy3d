@@ -1750,7 +1750,9 @@ class Simulation(Box):  # pylint:disable=too-many-public-methods
 
         return nyquist_step
 
-    def min_sym_box(self, box: Box) -> Box:  # pylint:disable=too-many-locals
+    def min_sym_box(
+        self, box: Box, include_pml: bool = False
+    ) -> Box:  # pylint:disable=too-many-locals
         """Compute the smallest Box restricted to the first quadrant in the presence of symmetries
         that fully covers the original Box when symmetries are applied.
 
@@ -1767,7 +1769,7 @@ class Simulation(Box):  # pylint:disable=too-many-public-methods
         """
 
         bounds_min, bounds_max = box.bounds
-        sim_bs_min, sim_bs_max = self.bounds_pml
+        sim_bs_min, sim_bs_max = self.bounds_pml if include_pml else self.bounds
         bmin_new, bmax_new = [], []
 
         zipped = zip(self.center, self.symmetry, bounds_min, bounds_max, sim_bs_min, sim_bs_max)
@@ -1783,9 +1785,11 @@ class Simulation(Box):  # pylint:disable=too-many-public-methods
                 bmax_tmp = max(bmax, 2 * center - bmin)
             # Extend well past the simulation domain if needed, but truncate if original box
             # is too large, specifically to avoid issues with inf.
-            sim_size = sim_bmax - sim_bmin
-            bmin_new.append(max(bmin_tmp, sim_bmin - sim_size))
-            bmax_new.append(min(bmax_tmp, sim_bmax + sim_size))
+            #sim_size = sim_bmax - sim_bmin
+            #bmin_new.append(max(bmin_tmp, sim_bmin - sim_size))
+            #bmax_new.append(min(bmax_tmp, sim_bmax + sim_size))
+            bmin_new.append(max(bmin_tmp, sim_bmin))
+            bmax_new.append(min(bmax_tmp, sim_bmax))
 
         return Box.from_bounds(bmin_new, bmax_new)
 

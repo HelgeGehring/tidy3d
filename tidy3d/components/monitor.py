@@ -31,6 +31,10 @@ class Monitor(Box, ABC):
         min_length=1,
     )
 
+    record_in_pml: bool = pydantic.Field(
+        False, title="Record in PML", description="Record in PML (disabled by default)."
+    )
+
     @cached_property
     def plot_params(self) -> PlotParams:
         """Default parameters for plotting a Monitor object."""
