@@ -13,6 +13,19 @@ from tidy3d.log import SetupError, ValidationError, DataError
 from ..utils import assert_log_level
 
 
+"""
+E   pydantic.error_wrappers.ValidationError: 1 validation error for BlochBoundary
+E   bloch_vec
+E     field required (type=value_error.missing)
+"""
+
+
+def test_bloch_phase_missing_vec():
+    bb = BlochBoundary()
+    boundary = Boundary(plus=bb, minus=bb)
+    spec = BoundarySpec(x=boundary, y=boundary, z=boundary)
+
+
 def test_bloch_phase():
     bb = BlochBoundary(bloch_vec=1.0)
     ph = bb.bloch_phase
