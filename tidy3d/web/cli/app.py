@@ -38,6 +38,12 @@ def configure(apikey):
     apikey : str
         User input api key.
     """
+    if not os.path.exists(TIDY3D_DIR):
+        os.mkdir(TIDY3D_DIR)
+    with open(CONFIG_FILE, "w+", encoding="utf-8") as config_file:
+        toml_config = toml.loads(config_file.read())
+        toml_config.update({"apikey": apikey})
+        config_file.write(toml.dumps(toml_config))
 
     def auth(req):
         """Enrich auth information to request.
