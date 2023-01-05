@@ -7,6 +7,10 @@ name: Tidy3d Pre-Release
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ feature/pre-release-workflow ]
+  pull_request:
+    branches: [ feature/pre-release-workflow ]
 
 jobs:
   echo-from-prerelease-branch:
