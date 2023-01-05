@@ -23,4 +23,4 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - run: |
         echo "running pre-release workflow from branch: "
-        echo ${GITHUB_REF##*/}
+        echo ${ github.ref_name }
