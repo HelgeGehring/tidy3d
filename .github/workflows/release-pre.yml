@@ -23,4 +23,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - run: |
         echo "running pre-release workflow from branch: "
-        echo ${ github.ref_name }
+        echo ${{ github.ref_name }}
+        echo ${{ github.ref }}
+        echo ${{ github.head_ref }}
