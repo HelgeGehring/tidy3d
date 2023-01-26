@@ -240,3 +240,28 @@ def test_epsilon_eval():
 
     expected = {2e14: np.mean(eps_diag_2), 5e14: np.mean(eps_diag_5)}
     eps_compare(material, expected)
+
+
+def test_rotation():
+    # check that transpose is inverse
+    axis = np.random.random(3)
+    rot = td.RotationAroundAxis(axis=tuple(axis), angle=1.23)
+
+    R = rot.matrix
+
+    assert np.all(np.abs(np.matmul(np.transpose(R), R)-np.eye(3)) < 1.0e-15)
+    assert np.all(np.abs(np.matmul(R, np.transpose(R))-np.eye(3)) < 1.0e-15)
+
+    # check that rotation around x, y, z by 90 degrees works as expected
+    tan_dims = [[1, 2], [2, 0], [0, 1]]
+
+    for dim in range(3):
+        axis = [0, 0, 0]
+        axis[dim] = 1
+        rot = td.RotationAroundAxis(axis=axis, angle=np.pi/2)
+
+        v0 = np.random.random(3)
+        vr = rot.rotate_vector(v0)
+        assert np.abs(v0[dim] - vr[dim]) < 1.0e-15
+        assert np.abs(v0[tan_dims[dim][0]] - vr[tan_dims[dim][1]]) < 1.0e-15
+        assert np.abs(v0[tan_dims[dim][1]] + vr[tan_dims[dim][0]]) < 1.0e-15

@@ -164,6 +164,15 @@ FreqBoundMax = float
 FreqBoundMin = float
 FreqBound = Tuple[FreqBoundMin, FreqBoundMax]
 
+
+RealOrComplex = Union[float, tidycomplex, ComplexNumber]
+Matrix3 = Tuple[
+    Tuple[RealOrComplex, RealOrComplex, RealOrComplex],
+    Tuple[RealOrComplex, RealOrComplex, RealOrComplex],
+    Tuple[RealOrComplex, RealOrComplex, RealOrComplex],
+]
+#Matrix3 = Numpy
+
 """ sources """
 
 Polarization = Literal["Ex", "Ey", "Ez", "Hx", "Hy", "Hz"]

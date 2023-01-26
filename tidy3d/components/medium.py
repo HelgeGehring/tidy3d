@@ -11,13 +11,13 @@ import xarray as xr
 
 from .base import Tidy3dBaseModel, cached_property
 from .grid.grid import Coords
-from .types import PoleAndResidue, Ax, FreqBound, TYPE_TAG_STR, InterpMethod, Numpy
+from .types import PoleAndResidue, Ax, FreqBound, TYPE_TAG_STR, InterpMethod, Numpy, Coordinate, Matrix3
 from .data.dataset import PermittivityDataset
 from .data.data_array import ScalarFieldDataArray
 from .viz import add_ax_if_none
 from .validators import validate_name_str
 from ..constants import C_0, pec_val, EPSILON_0
-from ..constants import HERTZ, CONDUCTIVITY, PERMITTIVITY, RADPERSEC, MICROMETER, SECOND
+from ..constants import HERTZ, CONDUCTIVITY, PERMITTIVITY, RADPERSEC, MICROMETER, SECOND, RADIAN
 from ..log import log, ValidationError, SetupError
 
 # evaluate frequency as this number (Hz) if inf
@@ -294,7 +294,7 @@ class Medium(AbstractMedium):
     """
 
     permittivity: float = pd.Field(
-        1.0, ge=1.0, title="Permittivity", description="Relative permittivity.", units=PERMITTIVITY
+        1.0, ge=0.0, title="Permittivity", description="Relative permittivity.", units=PERMITTIVITY
     )
 
     conductivity: float = pd.Field(
@@ -1070,7 +1070,205 @@ class AnisotropicMedium(AbstractMedium):
         return ax
 
 
+class FullyAnisotropicMedium(AbstractMedium):
+    """Fully anisotropic medium.
+
+    Note
+    ----
+    Only diagonal anisotropy is currently supported.
+
+    Example
+    -------
+    >>> medium_xx = Medium(permittivity=4.0)
+    >>> medium_yy = Medium(permittivity=4.1)
+    >>> medium_zz = Medium(permittivity=3.9)
+    >>> anisotropic_dielectric = AnisotropicMedium(xx=medium_xx, yy=medium_yy, zz=medium_zz)
+    >>> anisotropic_dielectric = FullyAnisotropicMedium(
+    >>>    xx=medium_xx, xy=medium_xy, xz=medium_xz,
+    >>>    yx=medium_yx, yy=medium_yy, yz=medium_yz,
+    >>>    zx=medium_zx, zy=medium_zy, zz=medium_zz,
+    >>>)
+    """
+
+    permittivity: Matrix3 = pd.Field(
+        [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        title="Permittivity",
+        description="Relative permittivity.",
+#        units=PERMITTIVITY
+    )
+
+    conductivity: Matrix3 = pd.Field(
+        [[0, 0, 0], [0, 0, 0], [0, 0, 0]],
+        title="Conductivity",
+        description="Electric conductivity.  Defined such that the imaginary part of the complex "
+        "permittivity at angular frequency omega is given by conductivity/omega.",
+#        units=CONDUCTIVITY,
+    )
+
+    @classmethod
+    def from_diagonal(cls, xx: Medium, yy: Medium, zz: Medium, rotation: RotationType):
+
+        permittivity_diag = [
+            [xx.permittivity, 0, 0],
+            [0, yy.permittivity, 0],
+            [0, 0, zz.permittivity],
+        ]
+
+        conductivity_diag = [
+            [xx.permittivity, 0, 0],
+            [0, yy.permittivity, 0],
+            [0, 0, zz.permittivity],
+        ]
+
+        permittivity = rotation.rotate_tensor(permittivity_diag)
+        conductivity = rotation.rotate_tensor(conductivity_diag)
+
+        return cls(permittivity=permittivity, conductivity=conductivity)
+
+#        R = cls._rotation_matrix_axis(normal, angle)
+#        RT = np.transpose(R)
+
+#        eps_diag = np.eye(3)
+#        sigma_diag = np.zeros((3, 3))
+
+#        for dim, med in enumerate((xx, yy, zz)):
+#            eps_diag[dim] = med.permittivity
+#            sigma_diag[dim] = med.conductivity
+
+#        eps = np.matmul(RT, np.matmul(eps_diag, R))
+#        sigma = np.matmul(RT, np.matmul(sigma_diag, R))
+
+#        xx_rot = Medium(permittivity=eps[0, 0], conductivity=sigma
+
+#        return cls(
+
+#    def rotate_diagonal_euler(xx, yy, zz, alpha, beta, gamma):
+#        pass
+
+    @cached_property
+    def permittivity_primary(self) -> Tuple[float, float, float]:
+        return np.linalg.eigvals(self.permittivity)
+
+    @ensure_freq_in_range
+    def eps_model(self, frequency: float) -> complex:
+        """Complex-valued permittivity as a function of frequency."""
+
+        # FIX ME: this is quite nonsensical
+        (perm_xx, perm_yy, perm_zz) = self.permittivity_primary
+
+        xx = Medium(permittivity=perm_xx)
+        yy = Medium(permittivity=perm_yy)
+        zz = Medium(permittivity=perm_zz)
+
+        eps_xx = xx.eps_model(frequency)
+        eps_yy = yy.eps_model(frequency)
+        eps_zz = zz.eps_model(frequency)
+        return np.mean((eps_xx, eps_yy, eps_zz))
+
+    @ensure_freq_in_range
+    def eps_diagonal(self, frequency: float) -> Tuple[complex, complex, complex]:
+        """Main diagonal of the complex-valued permittivity tensor as a function of frequency."""
+
+        # FIX ME: this is quite nonsensical
+        (perm_xx, perm_yy, perm_zz) = self.permittivity_primary
+
+        xx = Medium(permittivity=perm_xx)
+        yy = Medium(permittivity=perm_yy)
+        zz = Medium(permittivity=perm_zz)
+
+        eps_xx = xx.eps_model(frequency)
+        eps_yy = yy.eps_model(frequency)
+        eps_zz = zz.eps_model(frequency)
+        return (eps_xx, eps_yy, eps_zz)
+
+    @add_ax_if_none
+    def plot(self, freqs: float, ax: Ax = None) -> Ax:
+        """Plot n, k of a :class:`Medium` as a function of frequency."""
+
+        freqs = np.array(freqs)
+        freqs_thz = freqs / 1e12
+
+        # FIX ME: this is quite nonsensical
+        (perm_xx, perm_yy, perm_zz) = self.permittivity_primary
+
+        xx = Medium(permittivity=perm_xx)
+        yy = Medium(permittivity=perm_yy)
+        zz = Medium(permittivity=perm_zz)
+
+        for label, medium_component in zip(("xx", "yy", "zz"), (xx, yy, zz)):
+
+            eps_complex = medium_component.eps_model(freqs)
+            n, k = AbstractMedium.eps_complex_to_nk(eps_complex)
+            ax.plot(freqs_thz, n, label=f"n, eps_{label}")
+            ax.plot(freqs_thz, k, label=f"k, eps_{label}")
+
+        ax.set_xlabel("frequency (THz)")
+        ax.set_title("medium dispersion")
+        ax.legend()
+        ax.set_aspect("auto")
+        return ax
+
 # types of mediums that can be used in Simulation and Structures
+
+
+class AbstractRotation(ABC, Tidy3dBaseModel):
+    """A medium within which electromagnetic waves propagate."""
+
+    @cached_property
+    @abstractmethod
+    def matrix(self) -> Numpy:
+        """Complex-valued permittivity as a function of frequency.
+
+        Parameters
+        ----------
+        frequency : float
+            Frequency to evaluate permittivity at (Hz).
+
+        Returns
+        -------
+        complex
+            Complex-valued relative permittivity evaluated at ``frequency``.
+        """
+
+    def rotate_vector(self, vec: Coordinate) -> Coordinate:
+        return np.matmul(self.matrix, vec).tolist()
+
+    def rotate_tensor(self, ten: Matrix3) -> Matrix3:
+        return np.matmul(self.matrix, np.matmul(ten, np.transpose(self.matrix))).tolist()
+
+
+class RotationAroundAxis(AbstractRotation):
+
+    axis: Coordinate = pd.Field(
+        ...,
+        title="Axis of Rotation",
+        description="A vector that specifies the axis of rotation.",
+        units=PERMITTIVITY,
+    )
+
+    angle: float = pd.Field(
+        ...,
+        title="Angle of Rotation",
+        description="Angle of rotation in radians.",
+        units=RADIAN,
+    )
+
+    @cached_property
+    def matrix(self) -> Matrix3:
+        n = self.axis / np.linalg.norm(self.axis)
+        c = np.cos(self.angle)
+        s = np.sin(self.angle)
+        R = np.zeros((3, 3))
+        tan_dim = [[1, 2], [2, 0], [0, 1]]
+
+        for dim in range(3):
+            R[dim, dim] = c + n[dim] ** 2 * (1 - c)
+            R[dim, tan_dim[dim][0]] = n[dim] * n[tan_dim[dim][0]] * (1 - c) - n[tan_dim[dim][1]] * s
+            R[dim, tan_dim[dim][1]] = n[dim] * n[tan_dim[dim][1]] * (1 - c) + n[tan_dim[dim][0]] * s
+
+        return R
+
+RotationType = Union[RotationAroundAxis]
 
 MediumType = Union[
     Medium,
@@ -1082,4 +1280,5 @@ MediumType = Union[
     Lorentz,
     Debye,
     Drude,
+    FullyAnisotropicMedium,
 ]
