@@ -62,6 +62,70 @@ def make_dyb(dls, shape, pmc):
     return dyb
 
 
+def make_axp(dls, shape, pmc):
+    """Primal average in x."""
+    Nx, Ny = shape
+    if Nx == 1:
+        return sp.csr_matrix((Ny, Ny))
+    mat = sp.csr_matrix(sp.diags([0.5, 0.5], [0, 1], shape=(Nx, Nx)))
+    if not pmc:
+        mat[0, 0] = 0.0
+    mat = sp.kron(mat, sp.eye(Ny))
+    return mat
+
+
+def make_axd(dls, shape, pmc):
+    """Dual average in x."""
+    Nx, Ny = shape
+    if Nx == 1:
+        return sp.csr_matrix((Ny, Ny))
+    weight_left = np.zeros(Nx)
+    weight_right = np.zeros(Nx)
+    weight_left[1:] = dls[1:] / (dls[:-1] + dls[1:])
+    weight_right[1:] = dls[:-1] / (dls[:-1] + dls[1:])
+    mat = sp.csr_matrix(sp.diags([weight_right, weight_left], [0, -1], shape=(Nx, Nx)))
+#    mat = sp.csr_matrix(sp.diags([0.5, 0.5], [0, -1], shape=(Nx, Nx)))
+#    mat = sp.csr_matrix(sp.diags([weight_left, weight_right], [0, -1], shape=(Nx, Nx)))
+    if not pmc:
+        mat[0, 0] = 1.0
+    else:
+        mat[0, 0] = 0.0
+    mat = sp.kron(mat, sp.eye(Ny))
+    return mat
+
+
+def make_ayp(dls, shape, pmc):
+    """Primal average in y."""
+    Nx, Ny = shape
+    if Ny == 1:
+        return sp.csr_matrix((Nx, Nx))
+    mat = sp.csr_matrix(sp.diags([0.5, 0.5], [0, 1], shape=(Ny, Ny)))
+    if not pmc:
+        mat[0, 0] = 0.0
+    mat = sp.kron(sp.eye(Nx), mat)
+    return mat
+
+
+def make_ayd(dls, shape, pmc):
+    """Dual average in y."""
+    Nx, Ny = shape
+    if Ny == 1:
+        return sp.csr_matrix((Nx, Nx))
+    weight_left = np.zeros(Ny)
+    weight_right = np.zeros(Ny)
+    weight_left[1:] = dls[1:] / (dls[:-1] + dls[1:])
+    weight_right[1:] = dls[:-1] / (dls[:-1] + dls[1:])
+    mat = sp.csr_matrix(sp.diags([weight_right, weight_left], [0, -1], shape=(Ny, Ny)))
+#    mat = sp.csr_matrix(sp.diags([0.5, 0.5], [0, -1], shape=(Ny, Ny)))
+#    mat = sp.csr_matrix(sp.diags([weight_left, weight_right], [0, -1], shape=(Ny, Ny)))
+    if not pmc:
+        mat[0, 0] = 1.0
+    else:
+        mat[0, 0] = 0.0
+    mat = sp.kron(sp.eye(Nx), mat)
+    return mat
+
+
 def create_d_matrices(shape, dlf, dlb, dmin_pmc=(False, False)):
     """Make the derivative matrices without PML. If dmin_pmc is True, the
     'backward' derivative in that dimension will be set to implement PMC
@@ -73,6 +137,19 @@ def create_d_matrices(shape, dlf, dlb, dmin_pmc=(False, False)):
     dyb = make_dyb(dlb[1], shape, dmin_pmc[1])
 
     return (dxf, dxb, dyf, dyb)
+
+
+def create_a_matrices(shape, dlf, dlb, dmin_pmc=(False, False)):
+    """Make the average matrices without PML. If dmin_pmc is True, the
+    'dual' derivative in that dimension will be set to implement PMC
+    boundary, otherwise it will be set to PEC."""
+
+    axp = make_axp(dlf[0], shape, dmin_pmc[0])
+    axd = make_axd(dlf[0], shape, dmin_pmc[0])
+    ayp = make_ayp(dlf[1], shape, dmin_pmc[1])
+    ayd = make_ayd(dlf[1], shape, dmin_pmc[1])
+
+    return (axp, axd, ayp, ayd)
 
 
 # pylint:disable=too-many-locals, too-many-arguments

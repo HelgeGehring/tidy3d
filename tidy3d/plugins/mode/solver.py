@@ -9,6 +9,7 @@ from ...components.types import Numpy
 from ...constants import ETA_0, C_0, fp_eps, pec_val
 from .derivatives import create_d_matrices as d_mats
 from .derivatives import create_s_matrices as s_mats
+from .derivatives import create_a_matrices as a_mats
 from .transforms import radial_transform, angled_transform
 
 # Consider vec to be complex if norm(vec.imag)/norm(vec) > TOL_COMPLEX
@@ -97,7 +98,7 @@ def compute_modes(
     different from just the transformation of the derivative operator. For example, in a bent
     waveguide, there is strictly speaking no k-vector in the original coordinates as the system
     is not translationally invariant there. However, if we define kz = R k_phi, then the
-    effective index approaches that for a straight-waveguide in the limit of infinite radius. 
+    effective index approaches that for a straight-waveguide in the limit of infinite radius.
     Since we use w = R phi in the radial_transform, there is nothing else neede in the k transform.
     For the angled_transform, the transformation between k-vectors follows from writing the field as
     E' exp(i k_p w) in transformed coordinates, and identifying this with
@@ -138,6 +139,8 @@ def compute_modes(
     # Add the PML on top of the derivatives; normalize by k0 to match the EM-possible notation
     der_mats = [Smat.dot(Dmat) / k0 for Smat, Dmat in zip(pml_mats, der_mats_tmp)]
 
+    avg_mats = a_mats((Nx, Ny), dl_f, dl_b, dmin_pmc)
+
     # Determine initial guess value for the solver in transformed coordinates
     if mode_spec.target_neff is None:
         eps_physical = np.array(eps_cross)
@@ -155,6 +158,7 @@ def compute_modes(
         eps_tensor,
         mu_tensor,
         der_mats,
+        avg_mats,
         num_modes,
         target_neff_p,
         mode_spec.precision,
@@ -185,7 +189,7 @@ def compute_modes(
 
 
 def solver_em(
-    Nx, Ny, eps_tensor, mu_tensor, der_mats, num_modes, neff_guess, mat_precision
+    Nx, Ny, eps_tensor, mu_tensor, der_mats, avg_mats, num_modes, neff_guess, mat_precision
 ):  # pylint:disable=too-many-arguments
     """Solve for the electromagnetic modes of a system defined by in-plane permittivity and
     permeability and assuming translational invariance in the normal direction.
@@ -256,6 +260,7 @@ def solver_em(
     eps_tensor = type_conversion(eps_tensor, mat_dtype)
     mu_tensor = type_conversion(mu_tensor, mat_dtype)
     der_mats = [type_conversion(f, mat_dtype) for f in der_mats]
+    avg_mats = [type_conversion(f, mat_dtype) for f in avg_mats]
     neff_guess = type_conversion(np.array([neff_guess]), mat_dtype)[0]
 
     # initial vector for eigensolver
@@ -263,7 +268,7 @@ def solver_em(
 
     # call solver
     if is_tensorial:
-        return solver_tensorial(eps_tensor, mu_tensor, der_mats, num_modes, vec_init, neff_guess)
+        return solver_tensorial(eps_tensor, mu_tensor, der_mats, avg_mats, num_modes, vec_init, neff_guess)
 
     return solver_diagonal(eps_tensor, mu_tensor, der_mats, num_modes, vec_init, neff_guess)
 
@@ -338,64 +343,107 @@ def solver_diagonal(
 
 
 def solver_tensorial(
-    eps, mu, der_mats, num_modes, vec_init, neff_guess
+    eps, mu, der_mats, avg_mats, num_modes, vec_init, neff_guess
 ):  # pylint:disable=too-many-arguments
     """EM eigenmode solver assuming ``eps`` or ``mu`` have off-diagonal elements."""
 
     N = eps.shape[-1]
     dxf, dxb, dyf, dyb = der_mats
+    axp, axd, ayp, ayd = avg_mats
 
     # Compute all blocks of the matrix for diagonalization
     inv_eps_zz = sp.spdiags(1 / eps[2, 2, :], [0], N, N)
     inv_mu_zz = sp.spdiags(1 / mu[2, 2, :], [0], N, N)
-    axax = -dxf.dot(sp.spdiags(eps[2, 0, :] / eps[2, 2, :], [0], N, N)) - sp.spdiags(
-        mu[1, 2, :] / mu[2, 2, :], [0], N, N
-    ).dot(dyf)
-    axay = -dxf.dot(sp.spdiags(eps[2, 1, :] / eps[2, 2, :], [0], N, N)) + sp.spdiags(
-        mu[1, 2, :] / mu[2, 2, :], [0], N, N
-    ).dot(dxf)
-    axbx = -dxf.dot(inv_eps_zz).dot(dyb) + sp.spdiags(
-        mu[1, 0, :] - mu[1, 2, :] * mu[2, 0, :] / mu[2, 2, :], [0], N, N
+
+    axax = (
+        - dxf.dot(sp.spdiags(eps[2, 0, :] / eps[2, 2, :], [0], N, N)).dot(axd)
+        - sp.spdiags(mu[1, 2, :], [0], N, N).dot(ayd).dot(inv_mu_zz).dot(dyf)
+        )
+
+    axay = (
+        - dxf.dot(sp.spdiags(eps[2, 1, :] / eps[2, 2, :], [0], N, N)).dot(ayd)
+        + sp.spdiags(mu[1, 2, :], [0], N, N).dot(ayd).dot(inv_mu_zz).dot(dxf)
+        )
+
+    axbx = (
+        - dxf.dot(inv_eps_zz).dot(dyb)
+        + sp.spdiags(mu[1, 0, :], [0], N, N).dot(ayd).dot(axp)
+        - sp.spdiags(mu[1, 2, :], [0], N, N).dot(ayd).dot(sp.spdiags(mu[2, 0, :] / mu[2, 2, :], [0], N, N)).dot(axp)
     )
-    axby = dxf.dot(inv_eps_zz).dot(dxb) + sp.spdiags(
-        mu[1, 1, :] - mu[1, 2, :] * mu[2, 1, :] / mu[2, 2, :], [0], N, N
+
+    axby = (
+        dxf.dot(inv_eps_zz).dot(dxb)
+        + sp.spdiags(mu[1, 1, :], [0], N, N)
+        - sp.spdiags(mu[1, 2, :], [0], N, N).dot(ayd).dot(sp.spdiags(mu[2, 1, :] / mu[2, 2, :], [0], N, N)).dot(ayp)
     )
-    ayax = -dyf.dot(sp.spdiags(eps[2, 0, :] / eps[2, 2, :], [0], N, N)) + sp.spdiags(
-        mu[0, 2, :] / mu[2, 2, :], [0], N, N
-    ).dot(dyf)
-    ayay = -dyf.dot(sp.spdiags(eps[2, 1, :] / eps[2, 2, :], [0], N, N)) - sp.spdiags(
-        mu[0, 2, :] / mu[2, 2, :], [0], N, N
-    ).dot(dxf)
-    aybx = -dyf.dot(inv_eps_zz).dot(dyb) + sp.spdiags(
-        -mu[0, 0, :] + mu[0, 2, :] * mu[2, 0, :] / mu[2, 2, :], [0], N, N
-    )
-    ayby = dyf.dot(inv_eps_zz).dot(dxb) + sp.spdiags(
-        -mu[0, 1, :] + mu[0, 2, :] * mu[2, 1, :] / mu[2, 2, :], [0], N, N
-    )
-    bxbx = -dxb.dot(sp.spdiags(mu[2, 0, :] / mu[2, 2, :], [0], N, N)) - sp.spdiags(
-        eps[1, 2, :] / eps[2, 2, :], [0], N, N
-    ).dot(dyb)
-    bxby = -dxb.dot(sp.spdiags(mu[2, 1, :] / mu[2, 2, :], [0], N, N)) + sp.spdiags(
-        eps[1, 2, :] / eps[2, 2, :], [0], N, N
-    ).dot(dxb)
-    bxax = -dxb.dot(inv_mu_zz).dot(dyf) + sp.spdiags(
-        eps[1, 0, :] - eps[1, 2, :] * eps[2, 0, :] / eps[2, 2, :], [0], N, N
-    )
-    bxay = dxb.dot(inv_mu_zz).dot(dxf) + sp.spdiags(
-        eps[1, 1, :] - eps[1, 2, :] * eps[2, 1, :] / eps[2, 2, :], [0], N, N
-    )
-    bybx = -dyb.dot(sp.spdiags(mu[2, 0, :] / mu[2, 2, :], [0], N, N)) + sp.spdiags(
-        eps[0, 2, :] / eps[2, 2, :], [0], N, N
-    ).dot(dyb)
-    byby = -dyb.dot(sp.spdiags(mu[2, 1, :] / mu[2, 2, :], [0], N, N)) - sp.spdiags(
-        eps[0, 2, :] / eps[2, 2, :], [0], N, N
-    ).dot(dxb)
-    byax = -dyb.dot(inv_mu_zz).dot(dyf) + sp.spdiags(
-        -eps[0, 0, :] + eps[0, 2, :] * eps[2, 0, :] / eps[2, 2, :], [0], N, N
-    )
-    byay = dyb.dot(inv_mu_zz).dot(dxf) + sp.spdiags(
-        -eps[0, 1, :] + eps[0, 2, :] * eps[2, 1, :] / eps[2, 2, :], [0], N, N
-    )
+
+    ayax = (
+        - dyf.dot(sp.spdiags(eps[2, 0, :] / eps[2, 2, :], [0], N, N)).dot(axd)
+        + sp.spdiags(mu[0, 2, :], [0], N, N).dot(axd).dot(inv_mu_zz).dot(dyf)
+        )
+
+    ayay = (
+        - dyf.dot(sp.spdiags(eps[2, 1, :] / eps[2, 2, :], [0], N, N)).dot(ayd)
+        - sp.spdiags(mu[0, 2, :], [0], N, N).dot(axd).dot(inv_mu_zz).dot(dxf)
+        )
+
+    aybx = (
+        - dyf.dot(inv_eps_zz).dot(dyb)
+        - sp.spdiags(mu[0, 0, :], [0], N, N)
+        + sp.spdiags(mu[0, 2, :], [0], N, N).dot(axd).dot(sp.spdiags(mu[2, 0, :] / mu[2, 2, :], [0], N, N)).dot(axp)
+        )
+
+    ayby = (
+        dyf.dot(inv_eps_zz).dot(dxb)
+        - sp.spdiags(mu[0, 1, :], [0], N, N).dot(axd).dot(ayp)
+        + sp.spdiags(mu[0, 2, :], [0], N, N).dot(axd).dot(sp.spdiags(mu[2, 1, :] / mu[2, 2, :], [0], N, N)).dot(ayp)
+        )
+
+
+    bxbx = (
+        - dxb.dot(sp.spdiags(mu[2, 0, :] / mu[2, 2, :], [0], N, N)).dot(axp)
+        - sp.spdiags(eps[1, 2, :], [0], N, N).dot(ayp).dot(inv_eps_zz).dot(dyb)
+        )
+
+    bxby = (
+        - dxb.dot(sp.spdiags(mu[2, 1, :] / mu[2, 2, :], [0], N, N)).dot(ayp)
+        + sp.spdiags(eps[1, 2, :], [0], N, N).dot(ayp).dot(inv_eps_zz).dot(dxb)
+        )
+
+    bxax = (
+        - dxb.dot(inv_mu_zz).dot(dyf)
+        + sp.spdiags(eps[1, 0, :], [0], N, N).dot(ayp).dot(axd)
+        - sp.spdiags(eps[1, 2, :], [0], N, N).dot(ayp).dot(sp.spdiags(eps[2, 0, :] / eps[2, 2, :], [0], N, N)).dot(axd)
+        )
+
+    bxay = (
+        dxb.dot(inv_mu_zz).dot(dxf)
+        + sp.spdiags(eps[1, 1, :], [0], N, N)
+        - sp.spdiags(eps[1, 2, :], [0], N, N).dot(ayp).dot(sp.spdiags(eps[2, 1, :] / eps[2, 2, :], [0], N, N)).dot(ayd)
+        )
+
+
+    bybx = (
+        - dyb.dot(sp.spdiags(mu[2, 0, :] / mu[2, 2, :], [0], N, N)).dot(axp)
+        + sp.spdiags(eps[0, 2, :], [0], N, N).dot(axp).dot(inv_eps_zz).dot(dyb)
+        )
+
+    byby = (
+        - dyb.dot(sp.spdiags(mu[2, 1, :] / mu[2, 2, :], [0], N, N)).dot(ayp)
+        - sp.spdiags(eps[0, 2, :], [0], N, N).dot(axp).dot(inv_eps_zz).dot(dxb)
+        )
+
+    byax = (
+        - dyb.dot(inv_mu_zz).dot(dyf)
+        - sp.spdiags(eps[0, 0, :], [0], N, N)
+        + sp.spdiags(eps[0, 2, :], [0], N, N).dot(axp).dot(sp.spdiags(eps[2, 0, :] / eps[2, 2, :], [0], N, N)).dot(axd)
+        )
+
+    byay = (
+        dyb.dot(inv_mu_zz).dot(dxf)
+        - sp.spdiags(eps[0, 1, :], [0], N, N).dot(axp).dot(ayd)
+        + sp.spdiags(eps[0, 2, :], [0], N, N).dot(axp).dot(sp.spdiags(eps[2, 1, :] / eps[2, 2, :], [0], N, N)).dot(ayd)
+        )
 
     mat = sp.bmat(
         [
@@ -426,9 +474,9 @@ def solver_tensorial(
     Hy = vecs[3 * N :, :]
 
     # Get the other field components
-    hxy_term = (-mu[2, 0, :] * Hx.T - mu[2, 1, :] * Hy.T).T
+    hxy_term = -sp.spdiags(mu[2, 0, :], [0], N, N).dot(axp).dot(Hx) - sp.spdiags(mu[2, 1, :], [0], N, N).dot(ayp).dot(Hy)
     Hz = inv_mu_zz.dot(dxf.dot(Ey) - dyf.dot(Ex) + hxy_term)
-    exy_term = (-eps[2, 0, :] * Ex.T - eps[2, 1, :] * Ey.T).T
+    exy_term = -sp.spdiags(eps[2, 0, :], [0], N, N).dot(axd).dot(Ex) - sp.spdiags(eps[2, 1, :], [0], N, N).dot(ayd).dot(Ey)
     Ez = inv_eps_zz.dot(dxb.dot(Hy) - dyb.dot(Hx) + exy_term)
 
     # Bundle up
