@@ -11,7 +11,7 @@ import xarray as xr
 
 from .base import Tidy3dBaseModel, cached_property
 from .grid.grid import Coords
-from .types import PoleAndResidue, Ax, FreqBound, TYPE_TAG_STR, InterpMethod, Numpy, Coordinate, Matrix3
+from .types import PoleAndResidue, Ax, FreqBound, TYPE_TAG_STR, InterpMethod, Numpy, Coordinate, RealTensor, ComplexTensor
 from .data.dataset import PermittivityDataset
 from .data.data_array import ScalarFieldDataArray
 from .viz import add_ax_if_none
@@ -121,6 +121,25 @@ class AbstractMedium(ABC, Tidy3dBaseModel):
         # This only needs to be overwritten for anisotropic materials
         eps = self.eps_model(frequency)
         return (eps, eps, eps)
+
+    @ensure_freq_in_range
+    def eps_tensor(self, frequency: float) -> ComplexTensor:
+        """Main diagonal of the complex-valued permittivity tensor as a function of frequency.
+
+        Parameters
+        ----------
+        frequency : float
+            Frequency to evaluate permittivity at (Hz).
+
+        Returns
+        -------
+        complex
+            The diagonal elements of the relative permittivity tensor evaluated at ``frequency``.
+        """
+
+        # This only needs to be overwritten for anisotropic materials
+        eps_diag = self.eps_diagonal(frequency)
+        return ((eps_diag[0], 0, 0), (0, eps_diag[1], 0), (0, 0, eps_diag[2]))
 
     @add_ax_if_none
     def plot(self, freqs: float, ax: Ax = None) -> Ax:  # pylint: disable=invalid-name
@@ -461,6 +480,18 @@ class CustomMedium(AbstractMedium):
             for comp in ["eps_xx", "eps_yy", "eps_zz"]
         ]
         return tuple(eps_list)
+
+    def eps_tensor_on_grid(
+        self,
+        frequency: float,
+        coords: Coords,
+    ) -> Tuple[Tuple[Numpy, Numpy, Numpy], Tuple[Numpy, Numpy, Numpy], Tuple[Numpy, Numpy, Numpy]]:
+
+        return (
+            (self.eps_diagonal_on_grid[0], 0, 0),
+            (0, self.eps_diagonal_on_grid[1], 0),
+            (0, 0, self.eps_diagonal_on_grid[2])
+        )
 
     @ensure_freq_in_range
     def eps_diagonal(self, frequency: float) -> Tuple[complex, complex, complex]:
@@ -1090,14 +1121,14 @@ class FullyAnisotropicMedium(AbstractMedium):
     >>>)
     """
 
-    permittivity: Matrix3 = pd.Field(
+    permittivity: RealTensor = pd.Field(
         [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
         title="Permittivity",
         description="Relative permittivity.",
 #        units=PERMITTIVITY
     )
 
-    conductivity: Matrix3 = pd.Field(
+    conductivity: RealTensor = pd.Field(
         [[0, 0, 0], [0, 0, 0], [0, 0, 0]],
         title="Conductivity",
         description="Electric conductivity.  Defined such that the imaginary part of the complex "
@@ -1181,6 +1212,20 @@ class FullyAnisotropicMedium(AbstractMedium):
         eps_zz = zz.eps_model(frequency)
         return (eps_xx, eps_yy, eps_zz)
 
+    @ensure_freq_in_range
+    def eps_tensor(self, frequency: float) -> ComplexTensor:
+        """Main diagonal of the complex-valued permittivity tensor as a function of frequency."""
+
+        eps = np.zeros((3, 3), dtype=np.complex128)
+
+        for i in range(3):
+            for j in range(3):
+                eps[i][j] = AbstractMedium.eps_sigma_to_eps_complex(
+                    self.permittivity[i][j], self.conductivity[i][j], frequency
+                )
+
+        return (tuple(eps[0, :]), tuple(eps[1, :]), tuple(eps[2, :]))
+
     @add_ax_if_none
     def plot(self, freqs: float, ax: Ax = None) -> Ax:
         """Plot n, k of a :class:`Medium` as a function of frequency."""
@@ -1233,7 +1278,7 @@ class AbstractRotation(ABC, Tidy3dBaseModel):
     def rotate_vector(self, vec: Coordinate) -> Coordinate:
         return np.matmul(self.matrix, vec).tolist()
 
-    def rotate_tensor(self, ten: Matrix3) -> Matrix3:
+    def rotate_tensor(self, ten: RealTensor) -> RealTensor:
         return np.matmul(self.matrix, np.matmul(ten, np.transpose(self.matrix))).tolist()
 
 
@@ -1254,7 +1299,7 @@ class RotationAroundAxis(AbstractRotation):
     )
 
     @cached_property
-    def matrix(self) -> Matrix3:
+    def matrix(self) -> RealTensor:
         n = self.axis / np.linalg.norm(self.axis)
         c = np.cos(self.angle)
         s = np.sin(self.angle)

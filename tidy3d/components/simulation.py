@@ -2116,7 +2116,11 @@ class Simulation(Box):  # pylint:disable=too-many-public-methods
             if coord_key[0] != "E":
                 return np.mean(structure.eps_diagonal(frequency, coords), axis=0)
             component = ["x", "y", "z"].index(coord_key[1])
-            return structure.eps_diagonal(frequency, coords)[component]
+            if len(coord_key) == 2:
+                cross_comp = component
+            else:
+                cross_comp = ["x", "y", "z"].index(coord_key[2])
+            return structure.eps_tensor(frequency, coords)[component][cross_comp]
 
         def make_eps_data(coords: Coords):
             """returns epsilon data on grid of points defined by coords"""
@@ -2141,7 +2145,10 @@ class Simulation(Box):  # pylint:disable=too-many-public-methods
             return xr.DataArray(eps_array, coords=coords, dims=("x", "y", "z"))
 
         # combine all data into dictionary
-        coords = grid[coord_key]
+        if coord_key[0] != "E":
+            coords = grid[coord_key]
+        else:
+            coords = grid[coord_key[0:2]]
         return make_eps_data(coords)
 
     @property

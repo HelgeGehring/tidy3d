@@ -6,7 +6,7 @@ from .base import Tidy3dBaseModel
 from .validators import validate_name_str
 from .geometry import GeometryType
 from .medium import MediumType, CustomMedium
-from .types import Ax, TYPE_TAG_STR
+from .types import Ax, TYPE_TAG_STR, ComplexTensor
 from .viz import add_ax_if_none, equal_aspect
 from .grid.grid import Coords
 from ..constants import MICROMETER
@@ -94,6 +94,23 @@ class Structure(AbstractStructure):
         if isinstance(self.medium, CustomMedium):
             return self.medium.eps_diagonal_on_grid(frequency=frequency, coords=coords)
         return self.medium.eps_diagonal(frequency=frequency)
+
+    def eps_tensor(self, frequency: float, coords: Coords) -> ComplexTensor:
+        """Full tensor of the complex-valued permittivity tensor as a function of frequency.
+
+        Parameters
+        ----------
+        frequency : float
+            Frequency to evaluate permittivity at (Hz).
+
+        Returns
+        -------
+        complex
+            The diagonal elements of the relative permittivity tensor evaluated at ``frequency``.
+        """
+        if isinstance(self.medium, CustomMedium):
+            return self.medium.eps_tensor_on_grid(frequency=frequency, coords=coords)
+        return self.medium.eps_tensor(frequency=frequency)
 
 
 class MeshOverrideStructure(AbstractStructure):

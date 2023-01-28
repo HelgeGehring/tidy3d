@@ -164,12 +164,16 @@ FreqBoundMax = float
 FreqBoundMin = float
 FreqBound = Tuple[FreqBoundMin, FreqBoundMax]
 
+ComplexTensor = Tuple[
+    Tuple[Complex, Complex, Complex],
+    Tuple[Complex, Complex, Complex],
+    Tuple[Complex, Complex, Complex],
+]
 
-RealOrComplex = Union[float, tidycomplex, ComplexNumber]
-Matrix3 = Tuple[
-    Tuple[RealOrComplex, RealOrComplex, RealOrComplex],
-    Tuple[RealOrComplex, RealOrComplex, RealOrComplex],
-    Tuple[RealOrComplex, RealOrComplex, RealOrComplex],
+RealTensor = Tuple[
+    Tuple[float, float, float],
+    Tuple[float, float, float],
+    Tuple[float, float, float],
 ]
 #Matrix3 = Numpy
 

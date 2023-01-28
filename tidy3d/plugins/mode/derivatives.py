@@ -68,6 +68,7 @@ def make_axp(dls, shape, pmc):
     if Nx == 1:
         return sp.csr_matrix((Ny, Ny))
     mat = sp.csr_matrix(sp.diags([0.5, 0.5], [0, 1], shape=(Nx, Nx)))
+#    mat = sp.csr_matrix(sp.diags([1], [0], shape=(Nx, Nx)))
     if not pmc:
         mat[0, 0] = 0.0
     mat = sp.kron(mat, sp.eye(Ny))
@@ -84,6 +85,7 @@ def make_axd(dls, shape, pmc):
     weight_left[1:] = dls[1:] / (dls[:-1] + dls[1:])
     weight_right[1:] = dls[:-1] / (dls[:-1] + dls[1:])
     mat = sp.csr_matrix(sp.diags([weight_right, weight_left], [0, -1], shape=(Nx, Nx)))
+#    mat = sp.csr_matrix(sp.diags([1], [0], shape=(Nx, Nx)))
 #    mat = sp.csr_matrix(sp.diags([0.5, 0.5], [0, -1], shape=(Nx, Nx)))
 #    mat = sp.csr_matrix(sp.diags([weight_left, weight_right], [0, -1], shape=(Nx, Nx)))
     if not pmc:
@@ -100,6 +102,7 @@ def make_ayp(dls, shape, pmc):
     if Ny == 1:
         return sp.csr_matrix((Nx, Nx))
     mat = sp.csr_matrix(sp.diags([0.5, 0.5], [0, 1], shape=(Ny, Ny)))
+#    mat = sp.csr_matrix(sp.diags([1], [0], shape=(Ny, Ny)))
     if not pmc:
         mat[0, 0] = 0.0
     mat = sp.kron(sp.eye(Nx), mat)
@@ -116,6 +119,7 @@ def make_ayd(dls, shape, pmc):
     weight_left[1:] = dls[1:] / (dls[:-1] + dls[1:])
     weight_right[1:] = dls[:-1] / (dls[:-1] + dls[1:])
     mat = sp.csr_matrix(sp.diags([weight_right, weight_left], [0, -1], shape=(Ny, Ny)))
+#    mat = sp.csr_matrix(sp.diags([1], [0], shape=(Ny, Ny)))
 #    mat = sp.csr_matrix(sp.diags([0.5, 0.5], [0, -1], shape=(Ny, Ny)))
 #    mat = sp.csr_matrix(sp.diags([weight_left, weight_right], [0, -1], shape=(Ny, Ny)))
     if not pmc:
