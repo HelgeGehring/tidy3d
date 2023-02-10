@@ -49,7 +49,7 @@ from ..utils import run_emulated, assert_log_level
 
 import tidy3d as td
 
-sys.path.append("/users/twhughes/Documents/Flexcompute/tidy3d-core")
+sys.path.append("/home/momchil/Drive/flexcompute/tidy3d-core")
 from tidy3d_backend.utils import Profile
 
 

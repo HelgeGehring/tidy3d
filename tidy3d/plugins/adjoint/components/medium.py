@@ -280,34 +280,35 @@ class JaxCustomMedium(CustomMedium, JaxObject):
             orig_data_array = self.eps_dataset.field_components[eps_field_name]
             coords = orig_data_array.coords
 
-            # construct the coordinates for interpolation and selection within the custom medium
-            interp_coords = {dim_pt: coords[dim_pt] for dim_pt in "xyz" if len(coords[dim_pt]) > 1}
-            isel_coords = {dim_pt: 0 for dim_pt in "xyz" if len(coords[dim_pt]) <= 1}
+            # # construct the coordinates for interpolation and selection within the custom medium
+            # interp_coords = {dim_pt: coords[dim_pt] for dim_pt in "xyz" if len(coords[dim_pt]) > 1}
+            # isel_coords = {dim_pt: 0 for dim_pt in "xyz" if len(coords[dim_pt]) <= 1}
 
-            # interpolate into the forward and adjoint fields along this dimension and dot them
-            e_fwd = grad_data_fwd.field_components[field_name]
-            e_adj = grad_data_adj.field_components[field_name]
-            e_dotted = (e_fwd * e_adj).isel(f=0, **isel_coords).interp(**interp_coords)
+            # # interpolate into the forward and adjoint fields along this dimension and dot them
+            # e_fwd = grad_data_fwd.field_components[field_name]
+            # e_adj = grad_data_adj.field_components[field_name]
+            # e_dotted = (e_fwd * e_adj).isel(f=0, **isel_coords).interp(**interp_coords)
 
-            # compute the size of the user-supplied medium along each dimension.
-            grid = grids[eps_field_name]
-            d_sizes = grid.sizes
+            # # compute the size of the user-supplied medium along each dimension.
+            # grid = grids[eps_field_name]
+            # d_sizes = grid.sizes
 
-            # if any of the sizes are just 0, indicating an ndim < 3, just normalize out to 1.0
-            d_sizes = (
-                np.ones(1) if len(dl) == 1 and dl[0] <= 0 else dl
-                for dl in (d_sizes.x, d_sizes.y, d_sizes.z)
-            )
+            # # if any of the sizes are just 0, indicating an ndim < 3, just normalize out to 1.0
+            # d_sizes = (
+            #     np.ones(1) if len(dl) == 1 and dl[0] <= 0 else dl
+            #     for dl in (d_sizes.x, d_sizes.y, d_sizes.z)
+            # )
 
-            # outer product all dimensions to get a volume element mask
-            d_vols = np.einsum("i, j, k -> ijk", *d_sizes)
+            # # outer product all dimensions to get a volume element mask
+            # d_vols = np.einsum("i, j, k -> ijk", *d_sizes)
 
-            # multiply volume element into gradient and reshape to expected vjp_shape
+            # # multiply volume element into gradient and reshape to expected vjp_shape
             vjp_shape = tuple(len(coord) for _, coord in coords.items())
-            vjp_values = (np.squeeze(d_vols) * e_dotted.real.values).reshape(vjp_shape)
+            # vjp_values = (np.squeeze(d_vols) * e_dotted.real.values).reshape(vjp_shape)
 
             # construct a DataArray storing the vjp
-            vjp_data_array = JaxDataArray(values=vjp_values, coords=coords)
+            vjp_data_array = JaxDataArray(values=np.zeros(vjp_shape), coords=coords)
+            # vjp_data_array = JaxDataArray(values=vjp_values, coords=coords)
             vjp_field_components[eps_field_name] = vjp_data_array
 
         vjp_eps_dataset = JaxPermittivityDataset(**vjp_field_components)
