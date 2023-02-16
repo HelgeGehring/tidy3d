@@ -1,26 +1,26 @@
 """Tests adjoint plugin."""
 
-from typing import Callable, Tuple
+from typing import Callable, Tuple,  Any
 
 import pytest
 import pydantic
-import jax.numpy as jnp
+
 import numpy as np
-from jax import grad, custom_vjp
-import jax
 from numpy.random import random
 
-import tidy3d as td
-from typing import Tuple, Any
+from jax import grad, custom_vjp
+import jax
+import jax.numpy as jnp
 
+import dask
+
+import tidy3d as td
 from tidy3d.log import DataError, Tidy3dKeyError
+
 from tidy3d.plugins.adjoint.components.base import JaxObject
 from tidy3d.plugins.adjoint.components.geometry import JaxBox, JaxPolySlab
-from tidy3d.plugins.adjoint.components.medium import (
-    JaxMedium,
-    JaxAnisotropicMedium,
-    JaxCustomMedium,
-)
+from tidy3d.plugins.adjoint.components.medium import JaxMedium, JaxAnisotropicMedium
+from tidy3d.plugins.adjoint.components.medium import JaxCustomMedium
 from tidy3d.plugins.adjoint.components.structure import JaxStructure
 from tidy3d.plugins.adjoint.components.simulation import JaxSimulation
 from tidy3d.plugins.adjoint.components.data.sim_data import JaxSimulationData
@@ -537,24 +537,6 @@ def test_validate_subpixel():
             subpixel=False,
         )
 
-
-# def test_validate_3D_geometry():
-#     """Make sure it errors if the size of a JaxBox is 1d or 2d."""
-
-#     b = JaxBox(center=(0,0,0), size=(1,1,1))
-
-#     with pytest.raises(AdjointError):
-#         b = JaxBox(center=(0,0,0), size=(0,1,1))
-
-#     with pytest.raises(AdjointError):
-#         b = JaxBox(center=(0,0,0), size=(0,1,0))
-
-#     p = JaxPolySlab(vertices=VERTICES, axis=2, slab_bounds=(0,1))
-
-#     with pytest.raises(AdjointError):
-#         p = JaxPolySlab(vertices=VERTICES, axis=2, slab_bounds=(0,0))
-
-
 def test_plot_sims():
     """Make sure plotting functions without erroring."""
 
@@ -581,8 +563,6 @@ def test_strict_types():
 
 def _test_polyslab_box(use_emulated_run):
     """Make sure box made with polyslab gives equivalent gradients (note, doesn't pass now)."""
-
-    np.random.seed(0)
 
     def f(size, center, is_box=True):
 
@@ -679,3 +659,104 @@ def _test_polyslab_box(use_emulated_run):
 
     assert np.allclose(gs_b, gs_p), f"size gradients dont match, got {gs_b} and {gs_p}"
     assert np.allclose(gc_b, gc_p), f"center gradients dont match, got {gc_b} and {gc_p}"
+
+
+def test_dask(use_emulated_run):
+    """Test parallel run over fn involving tidy3d and its gradient."""
+
+    np.random.seed(0)
+
+    def f(x):
+        box = JaxBox(size=(x, x, x), center=(-x, x, -x))
+        med = JaxMedium(permittivity=abs(x) + 1)
+        struct = JaxStructure(geometry=box, medium=med)
+        mode_monitor = td.ModeMonitor(
+            size=(1, 1, 0), center=(0, 0, 0), freqs=[1e12], mode_spec=td.ModeSpec(), name="mode"
+        )
+        sim = JaxSimulation(
+            size=(3, 3, 3),
+            run_time=1e-12,
+            input_structures=[struct],
+            output_monitors=[mode_monitor],
+            grid_spec=td.GridSpec.uniform(dl=0.01),
+        )
+        sim_data = run(sim, task_name=f"test")
+        amp = sim_data["mode"].amps.sel(mode_index=0, f=1e12, direction="+")
+        return jnp.sum(abs(amp) ** 2)
+
+    xs = np.linspace(0.1, 1, 5)
+
+    delayed_f = dask.delayed(f)
+    lazy_results = [delayed_f(x) for x in xs]
+    results_list = dask.compute(*lazy_results)
+
+    print(results_list)
+
+    g = jax.grad(f)
+    delayed_g = dask.delayed(g)
+    lazy_results_jax = [delayed_g(x) for x in xs]
+    results_list_jax = dask.compute(*lazy_results_jax)
+
+    print(results_list_jax)
+
+def test_multi_freq_dask(use_emulated_run):
+    """Test a multifrequency sim using dask."""
+
+    np.random.seed(0)
+    freqs = [1e12, 2e12]
+    x0 = 0.5
+
+    def f(x, freq):
+        box = JaxBox(size=(x, x, x), center=(-x, x, -x))
+        med = JaxMedium(permittivity=abs(x) + 1)
+        struct = JaxStructure(geometry=box, medium=med)
+        mode_monitor = td.ModeMonitor(
+            size=(1, 1, 0), center=(0, 0, 0), freqs=[freq], mode_spec=td.ModeSpec(), name="mode"
+        )
+        sim = JaxSimulation(
+            size=(3, 3, 3),
+            run_time=1e-12,
+            input_structures=[struct],
+            output_monitors=[mode_monitor],
+            grid_spec=td.GridSpec.uniform(dl=0.01),
+        )
+        sim_data = run(sim, task_name=f"test")
+        amp = sim_data["mode"].amps.sel(mode_index=0, f=freq, direction="+")
+        return jnp.sum(abs(amp) ** 2)
+
+
+    delayed_f = dask.delayed(f)
+    lazy_results = [delayed_f(x0, freq) for freq in freqs]
+    results_list = dask.compute(*lazy_results)
+
+    print(results_list)
+
+    g = jax.grad(f, argnums=(0,))
+    delayed_g = dask.delayed(g)
+    lazy_results_jax = [delayed_g(x0, freq) for freq in freqs]
+    results_list_jax = dask.compute(*lazy_results_jax)
+
+    print(results_list_jax)
+
+    def combined_f(x):
+        """Add the results together from each frequency."""
+
+        lazy_results_jax = [delayed_f(x, freq) for freq in freqs]
+        results_list_jax = dask.compute(*lazy_results_jax)
+        return jnp.sum(jnp.array(results_list_jax))
+
+    # call the combined objective function
+    combined_objective = combined_f(x0)
+
+    indi_objective = [f(x0, freq) for freq in freqs]
+    assert np.isclose(combined_objective, sum(indi_objective)), "raw values dont match"
+
+    combined_g = jax.grad(combined_f)
+    combined_grad = float(jax.lax.stop_gradient(combined_g(x0)))
+
+    grad_indi = float(sum([g(x0, freq)[0] for freq in freqs]))
+    assert np.isclose(combined_grad, grad_indi), "gradients dont match"
+
+
+
+

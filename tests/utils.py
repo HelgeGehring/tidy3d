@@ -280,6 +280,9 @@ def run_emulated(simulation: Simulation, **kwargs) -> SimulationData:
 
     def make_data(coords: dict, data_array_type: type, is_complex: bool = False) -> "data_type":
         """make a random DataArray out of supplied coordinates and data_type."""
+
+        np.random.seed(1)
+
         data_shape = [len(coords[k]) for k in data_array_type._dims]
         data = np.random.random(data_shape)
         data = (1 + 1j) * data if is_complex else data
