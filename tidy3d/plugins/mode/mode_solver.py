@@ -249,12 +249,14 @@ class ModeSolver(Tidy3dBaseModel):
         eps_tensor = np.take(eps_tensor, indices=[0], axis=1 + self.normal_axis)
         eps_tensor = np.squeeze(eps_tensor, axis=1 + self.normal_axis)
 
+        # swap axes to plane coordinates (normal_axis goes to z)
         if self.normal_axis == 0:
-            eps_tensor = eps_tensor[[4,5,3,7,8,6,1,2,0], ...]
+            rotated_eps_tensor = eps_tensor[[4, 5, 3, 7, 8, 6, 1, 2, 0], ...]
         if self.normal_axis == 1:
-            eps_tensor = eps_tensor[[0,2,1,6,8,7,3,5,4], ...]
+            rotated_eps_tensor = eps_tensor[[0, 2, 1, 6, 8, 7, 3, 5, 4], ...]
+        if self.normal_axis == 2:
+            rotated_eps_tensor = eps_tensor
 
-#        # swap axes to plane coordinates (normal_axis goes to z)
 #        eps_zz, (eps_xx, eps_yy) = self.plane.pop_axis(
 #            [eps_tensor[0, ...], eps_tensor[4, ...], eps_tensor[8, ...]],
 #            axis=self.normal_axis,
@@ -272,7 +274,7 @@ class ModeSolver(Tidy3dBaseModel):
 
         # construct eps to feed to mode solver
 #        return np.stack((eps_xx, eps_xy, eps_xz, eps_yx, eps_yy, eps_yz, eps_zx, eps_zy, eps_zz), axis=0)
-        return eps_tensor
+        return rotated_eps_tensor
 
     def _solve_all_freqs(
         self,

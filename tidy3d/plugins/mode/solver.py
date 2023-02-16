@@ -78,17 +78,12 @@ def compute_modes(
     (2N, 2N), and the full tensorial case, in which case it has shape (4N, 4N)."""
     eps_tensor = np.zeros((3, 3, N), dtype=np.complex128)
     mu_tensor = np.zeros((3, 3, N), dtype=np.complex128)
-    for dim, eps in enumerate([eps_xx, eps_yy, eps_zz]):
-        mu_tensor[dim, dim, :] = 1.0
-
-    for dim, eps in enumerate([eps_xx, eps_xy, eps_xz]):
-        eps_tensor[0, dim, :] = eps.ravel()
-
-    for dim, eps in enumerate([eps_yx, eps_yy, eps_yz]):
-        eps_tensor[1, dim, :] = eps.ravel()
-
-    for dim, eps in enumerate([eps_zx, eps_zy, eps_zz]):
-        eps_tensor[2, dim, :] = eps.ravel()
+    for row, eps_row in enumerate(
+        [[eps_xx, eps_xy, eps_xz], [eps_yx, eps_yy, eps_yz], [eps_zx, eps_zy, eps_zz]]
+    ):
+        mu_tensor[row, row, :] = 1.0
+        for col, eps in enumerate(eps_row):
+            eps_tensor[row, col, :] = eps.ravel()
 
     # Get Jacobian of all coordinate transformations. Initialize as identity (same as mu so far)
     jac_e = np.copy(mu_tensor)
@@ -364,6 +359,7 @@ def solver_tensorial(
     inv_eps_zz = sp.spdiags(1 / eps[2, 2, :], [0], N, N)
     inv_mu_zz = sp.spdiags(1 / mu[2, 2, :], [0], N, N)
 
+        # this needs testing
     if os.environ.get("TIDY3D_MODE_SOLVER_AVERAGE") == "1":
         print("Average")
         axax = (

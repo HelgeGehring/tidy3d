@@ -11,7 +11,7 @@ import xarray as xr
 
 from .base import Tidy3dBaseModel, cached_property
 from .grid.grid import Coords
-from .types import PoleAndResidue, Ax, FreqBound, TYPE_TAG_STR, InterpMethod, Numpy, Coordinate, RealTensor, ComplexTensor
+from .types import PoleAndResidue, Ax, FreqBound, TYPE_TAG_STR, InterpMethod, Numpy, Coordinate, RealTensor, ComplexTensor, Axis
 from .data.dataset import PermittivityDataset
 from .data.data_array import ScalarFieldDataArray
 from .viz import add_ax_if_none
@@ -122,24 +122,48 @@ class AbstractMedium(ABC, Tidy3dBaseModel):
         eps = self.eps_model(frequency)
         return (eps, eps, eps)
 
-    @ensure_freq_in_range
-    def eps_tensor(self, frequency: float) -> ComplexTensor:
-        """Main diagonal of the complex-valued permittivity tensor as a function of frequency.
+    def eps_comp(self, row: Axis, col: Axis, frequency: float) -> complex:
+        """Single component of the complex-valued permittivity tensor as a function of frequency.
 
         Parameters
         ----------
+        row : Axis
+            Component's row in the permittivity tensor.
+        col : Axis
+            Component's column in the permittivity tensor.
         frequency : float
             Frequency to evaluate permittivity at (Hz).
 
         Returns
         -------
         complex
-            The diagonal elements of the relative permittivity tensor evaluated at ``frequency``.
+           Element of the relative permittivity tensor evaluated at ``frequency``.
         """
 
         # This only needs to be overwritten for anisotropic materials
-        eps_diag = self.eps_diagonal(frequency)
-        return ((eps_diag[0], 0, 0), (0, eps_diag[1], 0), (0, 0, eps_diag[2]))
+        if row == col:
+            eps = self.eps_model(frequency)
+            return eps
+        else:
+            return 0
+
+#    @ensure_freq_in_range
+#    def eps_tensor(self, frequency: float) -> ComplexTensor:
+#        """The complex-valued permittivity tensor as a function of frequency.
+
+#        Parameters
+#        ----------
+#        frequency : float
+#            Frequency to evaluate permittivity at (Hz).
+
+#        Returns
+#        -------
+#        complex
+#            The relative permittivity tensor evaluated at ``frequency``.
+#        """
+
+#        eps_diag = self.eps_diagonal(frequency)
+#        return ((eps_diag[0], 0, 0), (0, eps_diag[1], 0), (0, 0, eps_diag[2]))
 
     @add_ax_if_none
     def plot(self, freqs: float, ax: Ax = None) -> Ax:  # pylint: disable=invalid-name
@@ -313,7 +337,7 @@ class Medium(AbstractMedium):
     """
 
     permittivity: float = pd.Field(
-        1.0, ge=0.0, title="Permittivity", description="Relative permittivity.", units=PERMITTIVITY
+        1.0, ge=1.0, title="Permittivity", description="Relative permittivity.", units=PERMITTIVITY
     )
 
     conductivity: float = pd.Field(
@@ -467,7 +491,7 @@ class CustomMedium(AbstractMedium):
         Returns
         -------
         Tuple[Numpy, Numpy, Numpy]
-            The complex-valued permittivity tensor at ``frequency`` interpolated
+            The diagonal elements of the relative permittivity tensor at ``frequency`` interpolated
             at the supplied coordinate.
         """
 
@@ -481,17 +505,70 @@ class CustomMedium(AbstractMedium):
         ]
         return tuple(eps_list)
 
-    def eps_tensor_on_grid(
+    def eps_comp_on_grid(
         self,
+        row: Axis,
+        col: Axis,
         frequency: float,
         coords: Coords,
-    ) -> Tuple[Tuple[Numpy, Numpy, Numpy], Tuple[Numpy, Numpy, Numpy], Tuple[Numpy, Numpy, Numpy]]:
+    ) -> Numpy:
+        """Spatial profile of a single component of the complex-valued permittivity tensor at
+        ``frequency`` interpolated at the supplied coordinates.
 
-        return (
-            (self.eps_diagonal_on_grid[0], 0, 0),
-            (0, self.eps_diagonal_on_grid[1], 0),
-            (0, 0, self.eps_diagonal_on_grid[2])
-        )
+        Parameters
+        ----------
+        row : Axis
+            Component's row in the permittivity tensor.
+        col : Axis
+            Component's column in the permittivity tensor.
+        frequency : float
+            Frequency to evaluate permittivity at (Hz).
+        coords : :class:`.Coords`
+            The grid point coordinates over which interpolation is performed.
+
+        Returns
+        -------
+        Numpy
+            Single component of the complex-valued permittivity tensor at ``frequency`` interpolated
+            at the supplied coordinate.
+        """
+
+        if row == col:
+            eps_freq = self.eps_dataset_freq(frequency)
+            interp_shape = [len(coord_comp) for coord_comp in coords.to_list]
+            comp = ["eps_xx", "eps_yy", "eps_zz"][row]
+            eps = np.array(
+                self._interp(eps_freq.field_components[comp], coords, self.interp_method)
+            ).reshape(interp_shape)
+            return eps
+        else:
+            return 0
+
+#    def eps_tensor_on_grid(
+#        self,
+#        frequency: float,
+#        coords: Coords,
+#    ) -> Tuple[Tuple[Numpy, Numpy, Numpy], Tuple[Numpy, Numpy, Numpy], Tuple[Numpy, Numpy, Numpy]]:
+#        """Spatial profile of the complex-valued permittivity tensor at ``frequency`` interpolated
+#        at the supplied coordinates.
+
+#        Parameters
+#        ----------
+#        frequency : float
+#            Frequency to evaluate permittivity at (Hz).
+#        coords : :class:`.Coords`
+#            The grid point coordinates over which interpolation is performed.
+
+#        Returns
+#        -------
+#        Tuple[Tuple[Numpy, Numpy, Numpy], Tuple[Numpy, Numpy, Numpy], Tuple[Numpy, Numpy, Numpy]]
+#            The complex-valued permittivity tensor at ``frequency`` interpolated
+#            at the supplied coordinate.
+#        """
+
+#        eps_diag = self.eps_diagonal_on_grid(frequency, coords)
+
+#        return ((eps_diag[0], 0, 0), (0, eps_diag[1], 0), (0, 0, eps_diag[2]))
 
     @ensure_freq_in_range
     def eps_diagonal(self, frequency: float) -> Tuple[complex, complex, complex]:
@@ -508,7 +585,7 @@ class CustomMedium(AbstractMedium):
 
     @ensure_freq_in_range
     def eps_model(self, frequency: float) -> complex:
-        """Spatial and poloarizaiton average of complex-valued permittivity
+        """Spatial and polarizaiton average of complex-valued permittivity
         as a function of frequency.
         """
         eps_freq = self.eps_dataset_freq(frequency)
@@ -1080,6 +1157,15 @@ class AnisotropicMedium(AbstractMedium):
         eps_zz = self.zz.eps_model(frequency)
         return (eps_xx, eps_yy, eps_zz)
 
+    def eps_comp(self, row: Axis, col: Axis, frequency: float) -> complex:
+        """Single component the complex-valued permittivity tensor as a function of frequency.
+        """
+
+        if row == col:
+            return [self.xx, self.yy, self.zz][row].eps_model(frequency)
+        else:
+            return 0
+
     @add_ax_if_none
     def plot(self, freqs: float, ax: Ax = None) -> Ax:
         """Plot n, k of a :class:`Medium` as a function of frequency."""
@@ -1125,7 +1211,7 @@ class FullyAnisotropicMedium(AbstractMedium):
         [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
         title="Permittivity",
         description="Relative permittivity.",
-#        units=PERMITTIVITY
+        units=PERMITTIVITY,
     )
 
     conductivity: RealTensor = pd.Field(
@@ -1133,8 +1219,36 @@ class FullyAnisotropicMedium(AbstractMedium):
         title="Conductivity",
         description="Electric conductivity.  Defined such that the imaginary part of the complex "
         "permittivity at angular frequency omega is given by conductivity/omega.",
-#        units=CONDUCTIVITY,
+        units=CONDUCTIVITY,
     )
+
+    @pd.validator("permittivity", always=True)
+    def permittivity_spd_and_ge_one(cls, val):
+        """Check that provided permittivity tensor is symmetric positive definite with eigenvalues >= 1."""
+
+        if not np.allclose(val, np.transpose(val), atol=1.0e-10):
+            raise ValidationError("Provided permittivity tensor is not symmetric.")
+
+        if np.any(np.linalg.eigvals(val) < 1 - 1.0e-10):
+            raise ValidationError("Main diagonal of provided permittivity tensor is not >= 1.")
+
+        return val
+
+    @pd.validator("conductivity", always=True)
+    def conductivity_ge_zero_and_commutes(cls, val, values):
+        """Check that the symmetric part of conductivity tensor commutes with permittivity tensor
+        (that is, simultaneously diagonalizable) with eigenvalues >= 0."""
+
+        perm = values.get("permittivity")
+        cond_sym = 0.5 * (val + np.transpose(val))
+
+        if not np.allclose(np.abs(np.matmul(perm, cond_sym) - np.matmul(cond_sym, perm)), 0, atol=1.0e-10):
+            raise ValidationError("Main directions of conductivity and permittivity tensor do not coincide.")
+
+        if np.any(np.linalg.eigvals(cond_sym) < 0):
+            raise ValidationError("Main diagonal of provided conductivity tensor is not >= 0.")
+
+        return val
 
     @classmethod
     def from_diagonal(cls, xx: Medium, yy: Medium, zz: Medium, rotation: RotationType):
@@ -1146,9 +1260,9 @@ class FullyAnisotropicMedium(AbstractMedium):
         ]
 
         conductivity_diag = [
-            [xx.permittivity, 0, 0],
-            [0, yy.permittivity, 0],
-            [0, 0, zz.permittivity],
+            [xx.conductivity, 0, 0],
+            [0, yy.conductivity, 0],
+            [0, 0, zz.conductivity],
         ]
 
         permittivity = rotation.rotate_tensor(permittivity_diag)
@@ -1156,93 +1270,73 @@ class FullyAnisotropicMedium(AbstractMedium):
 
         return cls(permittivity=permittivity, conductivity=conductivity)
 
-#        R = cls._rotation_matrix_axis(normal, angle)
-#        RT = np.transpose(R)
-
-#        eps_diag = np.eye(3)
-#        sigma_diag = np.zeros((3, 3))
-
-#        for dim, med in enumerate((xx, yy, zz)):
-#            eps_diag[dim] = med.permittivity
-#            sigma_diag[dim] = med.conductivity
-
-#        eps = np.matmul(RT, np.matmul(eps_diag, R))
-#        sigma = np.matmul(RT, np.matmul(sigma_diag, R))
-
-#        xx_rot = Medium(permittivity=eps[0, 0], conductivity=sigma
-
-#        return cls(
-
-#    def rotate_diagonal_euler(xx, yy, zz, alpha, beta, gamma):
-#        pass
-
     @cached_property
-    def permittivity_primary(self) -> Tuple[float, float, float]:
-        return np.linalg.eigvals(self.permittivity)
+    def eps_sigma_diag(self) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
+        perm_diag, vecs = np.linalg.eig(self.permittivity)
+        cond_diag = np.diag(np.matmul(np.transpose(vecs), np.matmul(self.conductivity, vecs)))
+
+        return (perm_diag, cond_diag)
 
     @ensure_freq_in_range
     def eps_model(self, frequency: float) -> complex:
         """Complex-valued permittivity as a function of frequency."""
+        perm_diag, cond_diag = self.eps_sigma_diag
 
-        # FIX ME: this is quite nonsensical
-        (perm_xx, perm_yy, perm_zz) = self.permittivity_primary
-
-        xx = Medium(permittivity=perm_xx)
-        yy = Medium(permittivity=perm_yy)
-        zz = Medium(permittivity=perm_zz)
-
-        eps_xx = xx.eps_model(frequency)
-        eps_yy = yy.eps_model(frequency)
-        eps_zz = zz.eps_model(frequency)
-        return np.mean((eps_xx, eps_yy, eps_zz))
+        eps_diag = AbstractMedium.eps_sigma_to_eps_complex(
+            perm_diag, cond_diag, frequency
+        )
+        return np.mean(eps_diag)
 
     @ensure_freq_in_range
     def eps_diagonal(self, frequency: float) -> Tuple[complex, complex, complex]:
         """Main diagonal of the complex-valued permittivity tensor as a function of frequency."""
 
-        # FIX ME: this is quite nonsensical
-        (perm_xx, perm_yy, perm_zz) = self.permittivity_primary
+        perm_diag, cond_diag = self.eps_sigma_diag
 
-        xx = Medium(permittivity=perm_xx)
-        yy = Medium(permittivity=perm_yy)
-        zz = Medium(permittivity=perm_zz)
+        if np.isscalar(frequency):
+            eps_diag = AbstractMedium.eps_sigma_to_eps_complex(
+                perm_diag, cond_diag, frequency
+            )
+        else:
+            eps_diag = AbstractMedium.eps_sigma_to_eps_complex(
+                perm_diag[:, None], cond_diag[:, None], frequency
+            )
 
-        eps_xx = xx.eps_model(frequency)
-        eps_yy = yy.eps_model(frequency)
-        eps_zz = zz.eps_model(frequency)
-        return (eps_xx, eps_yy, eps_zz)
+        return eps_diag
 
-    @ensure_freq_in_range
-    def eps_tensor(self, frequency: float) -> ComplexTensor:
+    def eps_comp(self, row: Axis, col: Axis, frequency: float) -> complex:
         """Main diagonal of the complex-valued permittivity tensor as a function of frequency."""
 
-        eps = np.zeros((3, 3), dtype=np.complex128)
+        return AbstractMedium.eps_sigma_to_eps_complex(
+            self.permittivity[row][col], self.conductivity[row][col], frequency
+        )
 
-        for i in range(3):
-            for j in range(3):
-                eps[i][j] = AbstractMedium.eps_sigma_to_eps_complex(
-                    self.permittivity[i][j], self.conductivity[i][j], frequency
-                )
+#    @ensure_freq_in_range
+#    def eps_tensor(self, frequency: float) -> ComplexTensor:
+#        """Main diagonal of the complex-valued permittivity tensor as a function of frequency."""
 
-        return (tuple(eps[0, :]), tuple(eps[1, :]), tuple(eps[2, :]))
+#        eps = np.zeros((3, 3), dtype=np.complex128)
+
+#        for i in range(3):
+#            for j in range(3):
+#                eps[i][j] = AbstractMedium.eps_sigma_to_eps_complex(
+#                    self.permittivity[i][j], self.conductivity[i][j], frequency
+#                )
+
+#        return (tuple(eps[0, :]), tuple(eps[1, :]), tuple(eps[2, :]))
 
     @add_ax_if_none
     def plot(self, freqs: float, ax: Ax = None) -> Ax:
-        """Plot n, k of a :class:`Medium` as a function of frequency."""
+        """Plot n, k of a :class:`FullyAnisotropicMedium` as a function of frequency."""
 
         freqs = np.array(freqs)
         freqs_thz = freqs / 1e12
 
-        # FIX ME: this is quite nonsensical
-        (perm_xx, perm_yy, perm_zz) = self.permittivity_primary
+        eps_diag = self.eps_diagonal(freqs)
 
-        xx = Medium(permittivity=perm_xx)
-        yy = Medium(permittivity=perm_yy)
-        zz = Medium(permittivity=perm_zz)
+        for ind, label in enumerate(("1", "2", "3")):
 
-        for label, medium_component in zip(("xx", "yy", "zz"), (xx, yy, zz)):
-
-            eps_complex = medium_component.eps_model(freqs)
+            eps_complex = eps_diag[ind, :]
             n, k = AbstractMedium.eps_complex_to_nk(eps_complex)
             ax.plot(freqs_thz, n, label=f"n, eps_{label}")
             ax.plot(freqs_thz, k, label=f"k, eps_{label}")

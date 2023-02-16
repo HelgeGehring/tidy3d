@@ -1143,6 +1143,7 @@ class Simulation(Box):  # pylint:disable=too-many-public-methods
         medium_list = [self.medium] + list(self.mediums)
         medium_list = [medium for medium in medium_list if not isinstance(medium, PECMedium)]
         # regular medium
+        # wouldn't using eps_diagonal be more accurate?
         eps_list = [
             medium.eps_model(freq).real
             for medium in medium_list
@@ -2115,12 +2116,12 @@ class Simulation(Box):  # pylint:disable=too-many-public-methods
             """Select the correct epsilon component if field locations are requested."""
             if coord_key[0] != "E":
                 return np.mean(structure.eps_diagonal(frequency, coords), axis=0)
-            component = ["x", "y", "z"].index(coord_key[1])
+            row = ["x", "y", "z"].index(coord_key[1])
             if len(coord_key) == 2:
-                cross_comp = component
+                col = row
             else:
-                cross_comp = ["x", "y", "z"].index(coord_key[2])
-            return structure.eps_tensor(frequency, coords)[component][cross_comp]
+                col = ["x", "y", "z"].index(coord_key[2])
+            return structure.eps_comp(row, col, frequency, coords)
 
         def make_eps_data(coords: Coords):
             """returns epsilon data on grid of points defined by coords"""

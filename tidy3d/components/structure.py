@@ -6,7 +6,7 @@ from .base import Tidy3dBaseModel
 from .validators import validate_name_str
 from .geometry import GeometryType
 from .medium import MediumType, CustomMedium
-from .types import Ax, TYPE_TAG_STR, ComplexTensor
+from .types import Ax, TYPE_TAG_STR, ComplexTensor, Axis
 from .viz import add_ax_if_none, equal_aspect
 from .grid.grid import Coords
 from ..constants import MICROMETER
@@ -95,8 +95,25 @@ class Structure(AbstractStructure):
             return self.medium.eps_diagonal_on_grid(frequency=frequency, coords=coords)
         return self.medium.eps_diagonal(frequency=frequency)
 
-    def eps_tensor(self, frequency: float, coords: Coords) -> ComplexTensor:
-        """Full tensor of the complex-valued permittivity tensor as a function of frequency.
+#    def eps_tensor(self, frequency: float, coords: Coords) -> ComplexTensor:
+#        """Full complex-valued permittivity tensor as a function of frequency.
+
+#        Parameters
+#        ----------
+#        frequency : float
+#            Frequency to evaluate permittivity at (Hz).
+
+#        Returns
+#        -------
+#        complex
+#            The relative permittivity tensor evaluated at ``frequency``.
+#        """
+#        if isinstance(self.medium, CustomMedium):
+#            return self.medium.eps_tensor_on_grid(frequency=frequency, coords=coords)
+#        return self.medium.eps_tensor(frequency=frequency)
+
+    def eps_comp(self, row: Axis, col: Axis, frequency: float, coords: Coords) -> complex:
+        """Full complex-valued permittivity tensor as a function of frequency.
 
         Parameters
         ----------
@@ -106,11 +123,11 @@ class Structure(AbstractStructure):
         Returns
         -------
         complex
-            The diagonal elements of the relative permittivity tensor evaluated at ``frequency``.
+            The relative permittivity tensor evaluated at ``frequency``.
         """
         if isinstance(self.medium, CustomMedium):
-            return self.medium.eps_tensor_on_grid(frequency=frequency, coords=coords)
-        return self.medium.eps_tensor(frequency=frequency)
+            return self.medium.eps_comp_on_grid(row, col, frequency=frequency, coords=coords)
+        return self.medium.eps_comp(row, col, frequency=frequency)
 
 
 class MeshOverrideStructure(AbstractStructure):

@@ -175,7 +175,6 @@ RealTensor = Tuple[
     Tuple[float, float, float],
     Tuple[float, float, float],
 ]
-#Matrix3 = Numpy
 
 """ sources """
 
