@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Issue a deprecation warning that `Geometry.intersections` will be renamed to `Geometry.intersections_plane` in 2.0.
-
+- Scattering matrix plugin accepts list of frequencies and returns data as an `xarray.DataArray` instead of a nested `dict`.
 
 ### Fixed
 - Progressbars always set to 100% when webapi functions are finished.
