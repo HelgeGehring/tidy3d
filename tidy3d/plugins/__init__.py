@@ -8,7 +8,7 @@ from .dispersion.fit_web import StableDispersionFitter, AdvancedFitterParam
 from .mode.mode_solver import ModeSolver, ModeSolverData
 
 # scattering matrix
-from .smatrix.smatrix import ComponentModeler, Port
+from .smatrix.smatrix import ComponentModeler, Port, SMatrixDataArray
 
 # resonance finder
 from .resonance.resonance import ResonanceFinder
