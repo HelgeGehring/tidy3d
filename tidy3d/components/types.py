@@ -15,8 +15,6 @@ from matplotlib.axes import Axes
 from shapely.geometry.base import BaseGeometry
 from ..log import ValidationError
 
-""" Numpy Arrays """
-
 # type tag default name
 TYPE_TAG_STR = "type"
 
@@ -26,71 +24,76 @@ def annotate_type(UnionType):  # pylint:disable=invalid-name
     return Annotated[UnionType, pydantic.Field(discriminator=TYPE_TAG_STR)]
 
 
+""" Numpy Arrays """
+
 # generic numpy array
 Numpy = np.ndarray
 
 
-class TypedArrayLike(np.ndarray):
-    """A numpy array with a type given by cls.inner_type"""
+class ArrayLike:
+    """Type that stores a numpy array."""
 
-    @classmethod
-    def make_tuple(cls, v):
-        """Converts a nested list of lists into a list of tuples."""
-        return (
-            tuple(cls.make_tuple(x) for x in v)
-            if isinstance(v, list)
-            else cls.inner_type(v)  # pylint:disable=no-member
-        )
+    ndim = None
+    dtype = None
 
     @classmethod
     def __get_validators__(cls):
-        """boilerplate"""
-        yield cls.validate_type
+        yield cls.load_complex
+        yield cls.convert_to_numpy
+        yield cls.check_dims
 
     @classmethod
-    def validate_type(cls, val):
-        """validator"""
-        # need to fix, doesnt work for simulationdata_export and load?
+    def load_complex(cls, val):
+        """Special handling to load a complex-valued np.ndarray saved to file."""
+        if not isinstance(val, dict):
+            return val
+        if "real" not in val or "imag" not in val:
+            raise ValueError("ArrayLike real and imaginary parts not stored properly.")
+        arr_real = np.array(val["real"])
+        arr_imag = np.array(val["imag"])
+        return arr_real + 1j * arr_imag
 
-        if isinstance(val, np.ndarray):
-            val_ndims = len(val.shape)
-            cls_ndims = cls.ndims  # pylint:disable=no-member
+    @classmethod
+    def convert_to_numpy(cls, val):
+        """Convert the value to np.ndarray and provide some casting."""
+        return np.array(val, ndmin=1, dtype=cls.dtype, copy=True)
 
-            if (cls_ndims is not None) and (cls_ndims != val_ndims):
-                raise ValidationError(
-                    "wrong number of dimensions given. " f"Given {val_ndims}, expected {cls_ndims}."
-                )
-            return cls.make_tuple(val.tolist())
-
-        return tuple(val)
+    @classmethod
+    def check_dims(cls, val):
+        """Make sure the number of dimensions is correct."""
+        if cls.ndim and val.ndim != cls.ndim:
+            raise ValidationError(f"Expected {cls.ndim} dimensions for ArrayLike, got {val.ndim}.")
+        return val
 
     @classmethod
     def __modify_schema__(cls, field_schema):
-        """Sets the schema of ArrayLike."""
+        """Sets the schema of DataArray object."""
 
-        field_schema.update(
-            dict(
-                title="Array Like",
-                description="Accepts sequence (tuple, list, numpy array) and converts to tuple.",
-                type="tuple",
-                properties={},
-                required=[],
-            )
+        schema = dict(
+            title="ArrayLike",
+            type="ArrayLike",
         )
+        field_schema.update(schema)
 
 
-class ArrayLikeMeta(type):
-    """metclass for Array, enables Array[type] -> TypedArray"""
+def constrained_array(dtype: type = None, ndim: int = None) -> type:
+    """Generate an ArrayLike sub-type with constraints built in."""
+    type_name = "ArrayLike_"
+    if dtype is not None:
+        type_name += f"dtype={dtype}"
+    if ndim is not None:
+        type_name += f"ndim={ndim}"
+    return type(type_name, (ArrayLike,), dict(dtype=dtype, ndim=ndim))
 
-    def __getitem__(cls, type_ndims):
-        """Array[type, ndims] -> TypedArrayLike"""
-        desired_type, ndims = type_ndims
-        return type("Array", (TypedArrayLike,), {"inner_type": desired_type, "ndims": ndims})
 
-
-class ArrayLike(np.ndarray, metaclass=ArrayLikeMeta):
-    """type of numpy array with annotated type (Array[float], Array[complex])"""
-
+ArrayFloat1D = constrained_array(dtype=float, ndim=1)
+ArrayFloat2D = constrained_array(dtype=float, ndim=2)
+ArrayFloat3D = constrained_array(dtype=float, ndim=3)
+ArrayFloat4D = constrained_array(dtype=float, ndim=4)
+ArrayComplex1D = constrained_array(dtype=complex, ndim=1)
+ArrayComplex2D = constrained_array(dtype=complex, ndim=2)
+ArrayComplex3D = constrained_array(dtype=complex, ndim=3)
+ArrayComplex4D = constrained_array(dtype=complex, ndim=4)
 
 """ Complex Values """
 
@@ -147,7 +150,8 @@ GridSize = Union[pydantic.PositiveFloat, Tuple[pydantic.PositiveFloat, ...]]
 Axis = Literal[0, 1, 2]
 Axis2D = Literal[0, 1]
 Shapely = BaseGeometry
-Vertices = Union[Tuple[Coordinate2D, ...], ArrayLike[float, 2]]
+Vertices = Union[Tuple[Coordinate2D, ...], ArrayFloat2D]
+Vertices = constrained_array(ndim=2, dtype=float)
 PlanePosition = Literal["bottom", "middle", "top"]
 
 """ medium """
@@ -173,8 +177,8 @@ Direction = Literal["+", "-"]
 
 EMField = Literal["Ex", "Ey", "Ez", "Hx", "Hy", "Hz"]
 FieldType = Literal["Ex", "Ey", "Ez", "Hx", "Hy", "Hz"]
-FreqArray = Union[Tuple[float, ...], ArrayLike[float, 1]]
-ObsGridArray = Union[Tuple[float, ...], ArrayLike[float, 1]]
+FreqArray = Union[Tuple[float, ...], ArrayFloat1D]
+ObsGridArray = Union[Tuple[float, ...], ArrayFloat1D]
 
 """ plotting """
 

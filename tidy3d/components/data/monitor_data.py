@@ -18,7 +18,7 @@ from .data_array import FreqDataArray, TimeDataArray, FreqModeDataArray
 from .dataset import Dataset, AbstractFieldDataset, ElectromagneticFieldDataset
 from .dataset import FieldDataset, FieldTimeDataset, ModeSolverDataset, PermittivityDataset
 from ..base import TYPE_TAG_STR, cached_property
-from ..types import Coordinate, Symmetry, ArrayLike, Size, Numpy, TrackFreq
+from ..types import Coordinate, Symmetry, ArrayFloat1D, Size, Numpy, TrackFreq
 from ..grid.grid import Grid, Coords
 from ..validators import enforce_monitor_fields_present, required_if_symmetry_present
 from ..monitor import MonitorType, FieldMonitor, FieldTimeMonitor, ModeSolverMonitor
@@ -30,6 +30,9 @@ from ..source import SourceTimeType, CustomFieldSource
 from ..medium import Medium, MediumType
 from ...log import SetupError, DataError, Tidy3dNotImplementedError, log
 from ...constants import ETA_0, C_0, MICROMETER
+
+
+Coords1D = ArrayFloat1D
 
 
 class MonitorData(Dataset, ABC):
@@ -219,7 +222,7 @@ class ElectromagneticFieldData(AbstractFieldData, ElectromagneticFieldDataset, A
         return tan_fields
 
     @property
-    def _plane_grid_boundaries(self) -> Tuple[ArrayLike[float, 1], ArrayLike[float, 1]]:
+    def _plane_grid_boundaries(self) -> Tuple[Coords1D, Coords1D]:
         """For a 2D monitor data, return the boundaries of the in-plane grid to be used to compute
         differential area and to colocate fields to grid centers if needed."""
         if np.any(np.array(self.monitor.interval_space) > 1):

@@ -8,7 +8,7 @@ import pydantic
 import numpy as np
 
 from .base import Tidy3dBaseModel, cached_property, DATA_ARRAY_MAP
-from .types import Direction, Polarization, Ax, FreqBound, ArrayLike, Axis, PlotVal
+from .types import Direction, Polarization, Ax, FreqBound, ArrayFloat1D, Axis, PlotVal
 from .validators import assert_plane, validate_name_str, get_value
 from .data.dataset import FieldDataset
 from .geometry import Box
@@ -26,6 +26,8 @@ DFT_CUTOFF = 1e-8
 DATA_SPAN_TOL = 1e-8
 # width of Chebyshev grid used for broadband sources (in units of pulse width)
 CHEB_GRID_WIDTH = 1.5
+
+ArrayFloat1D = constrained_array(dtype=float, ndim=1)
 
 
 class SourceTime(ABC, Tidy3dBaseModel):
@@ -56,8 +58,8 @@ class SourceTime(ABC, Tidy3dBaseModel):
 
     def spectrum(
         self,
-        times: ArrayLike[float, 1],
-        freqs: ArrayLike[float, 1],
+        times: ArrayFloat1D,
+        freqs: ArrayFloat1D,
         dt: float,
         complex_fields: bool = False,
     ) -> complex:
@@ -99,7 +101,11 @@ class SourceTime(ABC, Tidy3dBaseModel):
         return dt * dft_matrix @ time_amps
 
     @add_ax_if_none
+<<<<<<< HEAD
     def plot(self, times: ArrayLike[float, 1], val: PlotVal = "real", ax: Ax = None) -> Ax:
+=======
+    def plot(self, times: ArrayFloat1D, ax: Ax = None) -> Ax:
+>>>>>>> a5aa346 (consistent ArrayLike, passes tests)
         """Plot the complex-valued amplitude of the source time-dependence.
 
         Parameters
@@ -139,7 +145,7 @@ class SourceTime(ABC, Tidy3dBaseModel):
     @add_ax_if_none
     def plot_spectrum(
         self,
-        times: ArrayLike[float, 1],
+        times: ArrayFloat1D,
         num_freqs: int = 101,
         val: PlotVal = "real",
         ax: Ax = None,

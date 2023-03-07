@@ -188,7 +188,7 @@ def test_polyslab_center_axis():
 
 
 def test_validate_polyslab_vertices_valid():
-    with pytest.raises(SetupError):
+    with pytest.raises(ValidationError):
         POLYSLAB.copy(update=dict(vertices=(1, 2, 3)))
     with pytest.raises(SetupError):
         crossing_verts = ((0, 0), (1, 1), (0, 1), (1, 0))
