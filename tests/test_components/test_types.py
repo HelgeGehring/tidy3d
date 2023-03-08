@@ -50,3 +50,13 @@ def test_array_like():
     assert np.all(my_obj.d == [1.0 + 0.0j])  # converted to complex
 
     my_obj.json()
+
+
+def test_hash():
+    class MyClass(Tidy3dBaseModel):
+
+        a: ArrayLike
+        b: constrained_array(ndim=1)
+
+    c = MyClass(a=[1.0], b=[2.0, 1.0])
+    hash(c)

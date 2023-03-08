@@ -525,6 +525,7 @@ class Tidy3dBaseModel(pydantic.BaseModel):
         return hash(self) >= hash(other)
 
     def __eq__(self, other):
+        """Define == for two Tidy3DBaseModels."""
         return self._json_string == other._json_string
 
     @cached_property

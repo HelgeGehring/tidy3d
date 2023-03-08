@@ -26,6 +26,24 @@ def annotate_type(UnionType):  # pylint:disable=invalid-name
 
 """ Numpy Arrays """
 
+
+def _totuple(arr: np.ndarray) -> tuple:
+    """Convert a numpy array to a nested tuple."""
+    try:
+        return tuple(_totuple(val) for val in arr)
+    except TypeError:
+        return arr
+
+
+class TidyNDArray(np.ndarray):
+    """subclass of np.ndarray with a hash."""
+
+    def __hash__(self) -> int:
+        """Hash the nested tuple version of the data."""
+        tuple_val = _totuple(self)
+        return hash(tuple_val)
+
+
 # generic numpy array
 Numpy = np.ndarray
 
@@ -56,7 +74,10 @@ class ArrayLike:
     @classmethod
     def convert_to_numpy(cls, val):
         """Convert the value to np.ndarray and provide some casting."""
-        return np.array(val, ndmin=1, dtype=cls.dtype, copy=True)
+        arr_numpy = np.array(val, ndmin=1, dtype=cls.dtype, copy=True)
+        arr_tidy3d = TidyNDArray(shape=arr_numpy.shape, dtype=arr_numpy.dtype)
+        arr_tidy3d[:] = arr_numpy
+        return arr_tidy3d
 
     @classmethod
     def check_dims(cls, val):
