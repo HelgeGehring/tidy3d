@@ -27,8 +27,6 @@ DATA_SPAN_TOL = 1e-8
 # width of Chebyshev grid used for broadband sources (in units of pulse width)
 CHEB_GRID_WIDTH = 1.5
 
-ArrayFloat1D = constrained_array(dtype=float, ndim=1)
-
 
 class SourceTime(ABC, Tidy3dBaseModel):
     """Base class describing the time dependence of a source."""
@@ -101,11 +99,7 @@ class SourceTime(ABC, Tidy3dBaseModel):
         return dt * dft_matrix @ time_amps
 
     @add_ax_if_none
-<<<<<<< HEAD
-    def plot(self, times: ArrayLike[float, 1], val: PlotVal = "real", ax: Ax = None) -> Ax:
-=======
-    def plot(self, times: ArrayFloat1D, ax: Ax = None) -> Ax:
->>>>>>> a5aa346 (consistent ArrayLike, passes tests)
+    def plot(self, times: ArrayFloat1D, val: PlotVal = "real", ax: Ax = None) -> Ax:
         """Plot the complex-valued amplitude of the source time-dependence.
 
         Parameters

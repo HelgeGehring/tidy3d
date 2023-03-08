@@ -78,14 +78,17 @@ class ArrayLike:
 
 def constrained_array(dtype: type = None, ndim: int = None) -> type:
     """Generate an ArrayLike sub-type with constraints built in."""
-    type_name = "ArrayLike_"
+
+    # note, a unique name is required for each subclass of ArrayLike with constraints
+    type_name = "ArrayLike"
     if dtype is not None:
-        type_name += f"dtype={dtype}"
+        type_name += f"_dtype={dtype}"
     if ndim is not None:
-        type_name += f"ndim={ndim}"
+        type_name += f"_ndim={ndim}"
     return type(type_name, (ArrayLike,), dict(dtype=dtype, ndim=ndim))
 
 
+# pre-define a set of commonly used array like instances for import and use in type hints
 ArrayFloat1D = constrained_array(dtype=float, ndim=1)
 ArrayFloat2D = constrained_array(dtype=float, ndim=2)
 ArrayFloat3D = constrained_array(dtype=float, ndim=3)
