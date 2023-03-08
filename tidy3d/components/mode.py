@@ -8,7 +8,7 @@ import numpy as np
 from ..constants import MICROMETER, RADIAN, GLANCING_CUTOFF
 from .base import Tidy3dBaseModel
 from .types import Axis2D, Literal, TrackFreq
-from ..exceptions import SetupError
+from ..log import SetupError
 
 
 class ModeSpec(Tidy3dBaseModel):

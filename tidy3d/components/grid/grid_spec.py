@@ -14,8 +14,7 @@ from ..types import Axis, Symmetry, annotate_type
 from ..source import SourceType
 from ..structure import Structure, StructureType
 from ..geometry import Box
-from ...log import log
-from ...exceptions import SetupError
+from ...log import SetupError, log
 from ...constants import C_0, MICROMETER
 
 

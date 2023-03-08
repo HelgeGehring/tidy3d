@@ -19,9 +19,7 @@ from .viz import add_ax_if_none
 from .validators import validate_name_str
 from ..constants import C_0, pec_val, EPSILON_0
 from ..constants import HERTZ, CONDUCTIVITY, PERMITTIVITY, RADPERSEC, MICROMETER, SECOND
-from ..exceptions import ValidationError, SetupError
-from ..log import log
-
+from ..log import log, ValidationError, SetupError
 
 # evaluate frequency as this number (Hz) if inf
 FREQ_EVAL_INF = 1e50

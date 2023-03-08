@@ -8,7 +8,8 @@ import numpy as np
 import jax.numpy as jnp
 from jax.tree_util import register_pytree_node_class
 from .....components.base import Tidy3dBaseModel, cached_property
-from .....exceptions import DataError, Tidy3dKeyError, AdjointError
+from .....log import DataError, Tidy3dKeyError
+from ...log import AdjointError
 
 
 @register_pytree_node_class

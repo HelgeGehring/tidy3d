@@ -13,7 +13,7 @@ import pydantic
 import numpy as np
 from matplotlib.axes import Axes
 from shapely.geometry.base import BaseGeometry
-from ..exceptions import ValidationError
+from ..log import ValidationError
 
 """ Numpy Arrays """
 

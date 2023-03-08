@@ -5,7 +5,6 @@ from typing import List, Tuple, Optional, Callable, Dict
 import pydantic as pd
 import numpy as np
 
-from ...log import log
 from ...constants import HERTZ, C_0
 from ...components.simulation import Simulation
 from ...components.geometry import Box
@@ -16,9 +15,8 @@ from ...components.data.sim_data import SimulationData
 from ...components.types import Direction, Ax, Complex
 from ...components.viz import add_ax_if_none, equal_aspect
 from ...components.base import Tidy3dBaseModel
-from ...exceptions import SetupError, Tidy3dKeyError
+from ...log import SetupError, Tidy3dKeyError, log
 from ...web.container import Batch, BatchData
-
 
 # fwidth of gaussian pulse in units of central frequency
 FWIDTH_FRAC = 1.0 / 10

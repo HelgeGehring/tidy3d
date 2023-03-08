@@ -7,6 +7,7 @@ import tidy3d as td
 from tidy3d.constants import fp_eps
 
 from tidy3d.components.grid.mesher import GradedMesher
+from ..utils import assert_log_level
 
 np.random.seed(4)
 
@@ -650,7 +651,7 @@ def test_mesher_timeout():
     grid = sim.grid
 
 
-def test_shapely_strtree_warnings():
+def test_shapely_strtree_warnings(caplog):
 
     with warnings.catch_warnings():
         warnings.simplefilter("error")

@@ -34,10 +34,8 @@ from .viz import plot_params_pec, plot_params_pmc, plot_params_bloch
 
 from ..version import __version__
 from ..constants import C_0, SECOND, inf
-from ..exceptions import Tidy3dKeyError, SetupError, ValidationError
-from ..log import log
+from ..log import log, Tidy3dKeyError, SetupError, ValidationError
 from ..updater import Updater
-
 
 # minimum number of grid points allowed per central wavelength in a medium
 MIN_GRIDS_PER_WVL = 6.0

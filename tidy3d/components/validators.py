@@ -5,7 +5,7 @@ from typing import Any
 import pydantic
 
 from .geometry import Box
-from ..exceptions import ValidationError, SetupError
+from ..log import ValidationError, SetupError
 
 """ Explanation of pydantic validators:
 

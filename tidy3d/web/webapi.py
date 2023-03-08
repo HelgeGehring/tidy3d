@@ -1,6 +1,7 @@
 """Provides lowest level, user-facing interface to server."""
 
 import json
+import logging
 import os
 import time
 from datetime import datetime, timedelta
@@ -18,13 +19,11 @@ from .s3utils import upload_string, get_s3_sts_token, download_file
 
 from .s3utils import upload_file
 from .task import TaskId, TaskInfo, Folder
-from ..log import log
 from ..components.data.sim_data import SimulationData
 from ..components.simulation import Simulation
 from ..components.types import Literal
-from ..exceptions import WebError
+from ..log import log, WebError
 from ..version import __version__
-
 
 REFRESH_TIME = 0.3
 TOTAL_DOTS = 3
@@ -566,7 +565,7 @@ def get_tasks(
             store_dict["task_name"].append(task["taskName"])
             store_dict["task_id"].append(task["taskId"])
         except KeyError:
-            log.warning(f"Error with task {task['taskId']}, skipping.")
+            logging.warning(f"Error with task {task['taskId']}, skipping.")
 
     sort_inds = sorted(
         range(len(store_dict["submit_time"])),

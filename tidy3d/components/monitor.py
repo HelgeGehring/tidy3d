@@ -14,8 +14,7 @@ from .mode import ModeSpec
 from .apodization import ApodizationSpec
 from .viz import PlotParams, plot_params_monitor, ARROW_COLOR_MONITOR, ARROW_ALPHA
 from ..constants import HERTZ, SECOND, MICROMETER, RADIAN, inf
-from ..exceptions import SetupError, ValidationError
-from ..log import log
+from ..log import SetupError, log, ValidationError
 
 
 BYTES_REAL = 4

@@ -4,15 +4,13 @@ from __future__ import annotations
 from typing import Dict, Callable
 import json
 import functools
-
 import yaml
+
 import pydantic as pd
 
-from .log import log
 from .version import __version__
-from .exceptions import FileError, SetupError
+from .log import FileError, SetupError, log
 from .components.base import Tidy3dBaseModel
-
 
 """Storing version numbers."""
 

@@ -6,7 +6,7 @@ from typing import Any, Dict
 import pydantic as pd
 from pydantic import Field
 
-from ..log import log
+from tidy3d import log
 
 
 class EnvSettings(pd.BaseSettings):

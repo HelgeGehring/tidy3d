@@ -6,13 +6,12 @@ from math import isclose
 import pydantic
 from shapely.geometry import Polygon
 
-from ...log import log
 from ...components.geometry import PolySlab, GeometryGroup
 from ...components.medium import MediumType
 from ...components.structure import Structure
 from ...components.types import Axis
+from ...log import log
 from ...constants import fp_eps
-
 
 # Warn for too many divided polyslabs
 _WARN_MAX_NUM_DIVISION = 100

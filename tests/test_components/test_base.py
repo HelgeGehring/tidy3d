@@ -6,7 +6,8 @@ import pydantic
 
 import tidy3d as td
 from tidy3d.components.base import Tidy3dBaseModel
-from tidy3d.exceptions import ValidationError, SetupError, Tidy3dKeyError
+from tidy3d.log import ValidationError, SetupError, Tidy3dKeyError
+from ..utils import assert_log_level
 
 
 M = td.Medium()

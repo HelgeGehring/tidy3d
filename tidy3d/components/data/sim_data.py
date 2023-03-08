@@ -12,9 +12,7 @@ from ..simulation import Simulation
 from ..boundary import BlochBoundary
 from ..types import Ax, Axis, annotate_type, Literal
 from ..viz import equal_aspect, add_ax_if_none
-from ...exceptions import DataError, Tidy3dKeyError, ValidationError
-from ...log import log
-
+from ...log import DataError, log, Tidy3dKeyError, ValidationError
 
 DATA_TYPE_MAP = {data.__fields__["monitor"].type_: data for data in MonitorDataTypes}
 

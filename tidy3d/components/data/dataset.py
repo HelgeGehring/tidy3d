@@ -14,7 +14,7 @@ from .data_array import ModeIndexDataArray
 
 from ..base import Tidy3dBaseModel
 from ..types import Axis
-from ...exceptions import DataError
+from ...log import DataError
 
 
 class Dataset(Tidy3dBaseModel, ABC):
