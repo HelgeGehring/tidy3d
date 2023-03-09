@@ -215,7 +215,7 @@ class MixedModeDataArray(DataArray):
     >>> mode_index_0 = np.arange(4)
     >>> mode_index_1 = np.arange(2)
     >>> coords = dict(f=f, mode_index_0=mode_index_0, mode_index_1=mode_index_1)
-    >>> data = MixedModeScalarDataArray((1+1j) * np.random.random((3, 4, 2)), coords=coords)
+    >>> data = MixedModeDataArray((1+1j) * np.random.random((3, 4, 2)), coords=coords)
     """
 
     __slots__ = ()
