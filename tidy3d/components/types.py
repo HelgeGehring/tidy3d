@@ -29,10 +29,9 @@ def annotate_type(UnionType):  # pylint:disable=invalid-name
 
 def _totuple(arr: np.ndarray) -> tuple:
     """Convert a numpy array to a nested tuple."""
-    try:
+    if arr.ndim > 1:
         return tuple(_totuple(val) for val in arr)
-    except TypeError:
-        return arr
+    return tuple(arr)
 
 
 class TidyNDArray(np.ndarray):
