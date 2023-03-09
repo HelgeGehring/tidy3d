@@ -155,7 +155,7 @@ class RectangularDielectric(Tidy3dBaseModel):
     )
 
     mode_spec: ModeSpec = pydantic.Field(
-        ...,
+        ModeSpec(),
         description=":class:`ModeSpec` defining waveguide mode properties.",
     )
 
@@ -169,7 +169,7 @@ class RectangularDielectric(Tidy3dBaseModel):
         description="Maximal size increase between adjacent grid boundaries.",
     )
 
-    @pydantic.validator("wavelength", "core_width", always=True)
+    @pydantic.validator("wavelength", "core_width", "gap", always=True)
     def _set_array(cls, val):
         if isinstance(val, float):
             return numpy.array((val,))
@@ -205,8 +205,6 @@ class RectangularDielectric(Tidy3dBaseModel):
 
     @pydantic.validator("gap", always=True)
     def _validate_gaps(cls, val, values):
-        if isinstance(val, float):
-            return numpy.array([val] * (values["core_width"].size - 1))
         if val.size == 1 and values["core_width"].size != 2:
             return numpy.array([val[0]] * (values["core_width"].size - 1))
         if val.size != values["core_width"].size - 1:
