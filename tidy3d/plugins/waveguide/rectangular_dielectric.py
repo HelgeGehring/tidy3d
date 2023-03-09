@@ -1,6 +1,4 @@
-"""Waveguide generation utilities"""
-
-from typing import Dict, Any, Union
+"""Rectangular dielectric waveguide utilities"""
 
 import numpy
 import pydantic
@@ -14,7 +12,7 @@ from ...components.mode import ModeSpec
 from ...components.simulation import Simulation
 from ...components.source import ModeSource, GaussianPulse
 from ...components.structure import Structure
-from ...components.types import ArrayLike, Axis, Coordinate, Size1D
+from ...components.types import ArrayLike, Axis, Coordinate, Size1D, Union
 from ...constants import C_0, inf, MICROMETER, RADIAN
 
 from ...log import log, ValidationError
@@ -23,6 +21,7 @@ from ..mode.mode_solver import ModeSolver
 
 
 # TODO: consider bend_radius in mode_spec
+
 
 class RectangularDielectric(Tidy3dBaseModel):
     """General rectangular dielectric waveguide
@@ -258,15 +257,18 @@ class RectangularDielectric(Tidy3dBaseModel):
 
     @cached_property
     def height(self):
+        """Domain height (size in the normal direction)"""
         return self.box_thickness + self.core_thickness + self.clad_thickness
 
     @cached_property
     def width(self):
+        """Domain width (size in the lateral direction)"""
         w = self.core_width.sum() + self.gap.sum() + 2 * self.side_margin
         if self.sidewall_angle > 0:
             w += 2 * self.core_thickness * numpy.tan(self.sidewall_angle)
         return w
 
+    # pylint:disable=too-many-locals,too-many-statements
     @cached_property
     def _structures_and_gridspec(self):
         """Build waveguide structure and custom grid_spec for mode solving"""
@@ -485,12 +487,14 @@ class RectangularDielectric(Tidy3dBaseModel):
 
     @property
     def structures(self):
+        """Waveguide structures for simulation, including the core(s), slabs (if any), and bottom
+        cladding, if different from the top."""
+
         return self._structures_and_gridspec[0]
 
     @cached_property
     def mode_solver(self):
-        """
-        Create a mode solver based on this waveguide structure
+        """Create a mode solver based on this waveguide structure
 
         Returns
         -------

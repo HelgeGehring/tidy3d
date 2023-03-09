@@ -456,6 +456,7 @@ class ElectromagneticFieldData(AbstractFieldData, ElectromagneticFieldDataset, A
 
         return fields
 
+    # pylint: disable=too-many-locals
     def outer_dot(
         self, field_data: Union[FieldData, ModeSolverData], conjugate: bool = False
     ) -> MixedModeDataArray:
@@ -482,6 +483,7 @@ class ElectromagneticFieldData(AbstractFieldData, ElectromagneticFieldDataset, A
 
         tan_dims = self._tangential_dims
 
+        # pylint: disable=protected-access
         assert all(
             a == b for a, b in zip(tan_dims, field_data._tangential_dims)
         ), "tangential dimensions must match"
