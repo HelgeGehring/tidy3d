@@ -332,6 +332,9 @@ which fields are to be projected is now determined automatically based on the me
 ## [1.3.1] - 2022-4-29
 
 ### Added
+- Waveguide plugin for quickly calculating modes in dielectric waveguides.
+- `ElectromagneticFieldData.dot_intep` to calculate mode overlap integrals between modes with different discretizations.
+- `ElectromagneticFieldData.mode_area` to calculate the effective mode area.
 
 ### Changed
 

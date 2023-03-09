@@ -7,6 +7,9 @@ from .dispersion.fit_web import StableDispersionFitter, AdvancedFitterParam
 # mode solver
 from .mode.mode_solver import ModeSolver, ModeSolverData
 
+# waveguide utilities
+from . import waveguide
+
 # scattering matrix
 from .smatrix.smatrix import ComponentModeler, Port
 

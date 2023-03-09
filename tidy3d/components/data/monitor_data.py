@@ -9,7 +9,13 @@ import xarray as xr
 import numpy as np
 import pydantic as pd
 
-from .data_array import FluxTimeDataArray, FluxDataArray, ModeIndexDataArray, ModeAmpsDataArray
+from .data_array import (
+    FluxTimeDataArray,
+    FluxDataArray,
+    MixedModeDataArray,
+    ModeIndexDataArray,
+    ModeAmpsDataArray,
+)
 from .data_array import FieldProjectionAngleDataArray, FieldProjectionCartesianDataArray
 from .data_array import FieldProjectionKSpaceDataArray
 from .data_array import DataArray, DiffractionDataArray
@@ -200,9 +206,8 @@ class ElectromagneticFieldData(AbstractFieldData, ElectromagneticFieldDataset, A
             The finite grid correction factors are applied and symmetry is expanded.
         """
 
-        tan_dims = self._tangential_dims
         normal_dim = "xyz"[self.monitor.size.index(0)]
-        field_components = ["E" + dim for dim in tan_dims] + ["H" + dim for dim in tan_dims]
+        field_components = [fname + dim for fname in "EH" for dim in self._tangential_dims]
         fields_expanded = self.symmetry_expanded_copy.field_components
         tan_fields = {}
         for field in field_components:
@@ -274,6 +279,31 @@ class ElectromagneticFieldData(AbstractFieldData, ElectromagneticFieldDataset, A
         return xr.DataArray(np.outer(sizes_dim0, sizes_dim1), dims=self._tangential_dims)
 
     @property
+    def _centered_fields(self) -> Dict[str, DataArray]:
+        """For a 2D monitor data, get all E and H fields colocated to the cell centers in the 2D
+        plane grid."""
+
+        fields_expanded = self.symmetry_expanded_copy.field_components
+
+        # Colocate to plane center coordinates
+        bounds = self._plane_grid_boundaries
+        centers = [(bs[1:] + bs[:-1]) / 2 for bs in bounds]
+
+        # Interpolate field components to cell centers
+        interp_dict = {}
+        for dim, cents in zip(self._tangential_dims, centers):
+            if cents.size > 0:
+                interp_dict[dim] = cents
+
+        normal_dim = "xyz"[self.monitor.size.index(0)]
+        centered_fields = {
+            key: val.squeeze(dim=normal_dim, drop=True).interp(**interp_dict)
+            for key, val in fields_expanded.items()
+        }
+
+        return centered_fields
+
+    @property
     def _centered_tangential_fields(self) -> Dict[str, DataArray]:
         """For a 2D monitor data, get the tangential E and H fields colocated to the cell centers in
         the 2D plane grid."""
@@ -319,6 +349,22 @@ class ElectromagneticFieldData(AbstractFieldData, ElectromagneticFieldDataset, A
         # Compute flux by integrating Poynting vector in-plane
         d_area = self._diff_area
         return FluxDataArray((self.poynting * d_area).sum(dim=d_area.dims))
+
+    @cached_property
+    def mode_area(self) -> FreqModeDataArray:
+        """Effective mode area corresponding to a 2D monitor
+
+        Effective mode area is calculated as: (∫|E|²dA)² / (∫|E|⁴dA)
+        """
+        fields = self._centered_fields
+        abs_e_sq = fields["Ex"].abs ** 2 + fields["Ey"].abs ** 2 + fields["Ez"].abs ** 2
+
+        # integrate over the plane
+        d_area = self._diff_area
+        num = (abs_e_sq * d_area).sum(dim=d_area.dims) ** 2
+        den = (abs_e_sq**2 * d_area).sum(dim=d_area.dims)
+
+        return FreqModeDataArray(num / den)
 
     def dot(
         self, field_data: Union[FieldData, ModeSolverData], conjugate: bool = True
@@ -373,6 +419,103 @@ class ElectromagneticFieldData(AbstractFieldData, ElectromagneticFieldDataset, A
         d_area = self._diff_area
         integrand = (e_self_x_h_other - h_self_x_e_other) * d_area
         return ModeAmpsDataArray(0.25 * integrand.sum(dim=d_area.dims))
+
+    # pylint:disable=too-many-locals
+    def dot_interp(
+        self, field_data: Union[FieldData, ModeSolverData], conjugate: bool = True
+    ) -> MixedModeDataArray:
+        """Dot product (modal overlap) with another :class:`.FieldData` object.
+
+        The tangetial fields from ``field_data`` are interpolated to this objects's grid, so the
+        data arrays don't need to have the same discretization.  The calculation is performed for
+        all common frequencies between data arrays.  In the output, ``mode_index_0`` and
+        ``mode_index_1`` are the mode indices from this object and ``field_data``, respectively.
+
+        Parameters
+        ----------
+        field_data : :class:`ElectromagneticFieldData`
+            A data instance to compute the dot product with.
+        conjugate : bool, optional
+            If ``True`` (default), the dot product is defined as ``1 / 4`` times the integral of
+            ``E_self* x H_other - H_self* x E_other``, where ``x`` is the cross product and ``*`` is
+            complex conjugation. If ``False``, the complex conjugation is skipped.
+
+        See also
+        --------
+        :member:`dot`
+        """
+
+        tan_dims = self._tangential_dims
+
+        # pylint:disable=protected-access
+        assert all(
+            a == b for a, b in zip(tan_dims, field_data._tangential_dims)
+        ), "tangential dimensions must match"
+
+        # Tangential fields for current
+        fields_self = self._centered_tangential_fields
+        if conjugate:
+            fields_self = {key: field.conj() for key, field in fields_self.items()}
+
+        # Tangential fields for other data
+        fields_other = field_data._tangential_fields  # pylint:disable=protected-access
+
+        # Cell centers used for current tangential fields
+        bounds = self._plane_grid_boundaries
+        centers = [(bs[1:] + bs[:-1]) / 2 for bs in bounds]
+
+        # Interpolate fields from other data to cell centers
+        kwargs = {"bounds_error": False, "fill_value": 0.0}
+        interp_dict = {}
+        for dim, cents in zip(tan_dims, centers):
+            if cents.size > 0:
+                interp_dict[dim] = cents
+        fields_other = {
+            key: val.interp(kwargs=kwargs, **interp_dict) for key, val in fields_other.items()
+        }
+
+        # Tangential field component names
+        dim1, dim2 = self._tangential_dims
+        e_1 = "E" + dim1
+        e_2 = "E" + dim2
+        h_1 = "H" + dim1
+        h_2 = "H" + dim2
+
+        # Prepare array with proper dimensions for the dot product data
+        arrays = (fields_self[e_1], fields_other[e_1])
+        coords = (arrays[0].coords, arrays[1].coords)
+        # Common frequencies to both data arrays
+        f = np.array(sorted(set(coords[0]["f"].values).intersection(coords[1]["f"].values)))
+        mode_index_0 = coords[0]["mode_index"].values
+        mode_index_1 = coords[1]["mode_index"].values
+        dtype = np.promote_types(arrays[0].dtype, arrays[1].dtype)
+        dot = np.empty((f.size, mode_index_0.size, mode_index_1.size), dtype=dtype)
+
+        # Calculate overlap for each common frequency and each mode pair
+        for i, freq in enumerate(f):
+            for mi0 in mode_index_0:
+                e_self_1 = fields_self[e_1].sel(f=freq, mode_index=mi0, drop=True)
+                e_self_2 = fields_self[e_2].sel(f=freq, mode_index=mi0, drop=True)
+                h_self_1 = fields_self[h_1].sel(f=freq, mode_index=mi0, drop=True)
+                h_self_2 = fields_self[h_2].sel(f=freq, mode_index=mi0, drop=True)
+
+                for mi1 in mode_index_1:
+                    e_other_1 = fields_other[e_1].sel(f=freq, mode_index=mi1, drop=True)
+                    e_other_2 = fields_other[e_2].sel(f=freq, mode_index=mi1, drop=True)
+                    h_other_1 = fields_other[h_1].sel(f=freq, mode_index=mi1, drop=True)
+                    h_other_2 = fields_other[h_2].sel(f=freq, mode_index=mi1, drop=True)
+
+                    # Cross products of fields
+                    e_self_x_h_other = e_self_1 * h_other_2 - e_self_2 * h_other_1
+                    h_self_x_e_other = h_self_1 * e_other_2 - h_self_2 * e_other_1
+
+                    # Integrate over plane
+                    d_area = self._diff_area
+                    integrand = (e_self_x_h_other - h_self_x_e_other) * d_area
+                    dot[i, mi0, mi1] = 0.25 * integrand.sum(dim=d_area.dims)
+
+        coords = {"f": f, "mode_index_0": mode_index_0, "mode_index_1": mode_index_1}
+        return MixedModeDataArray(dot, coords=coords)
 
     @property
     def time_reversed_copy(self) -> FieldData:
