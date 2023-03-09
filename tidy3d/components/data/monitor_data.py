@@ -184,6 +184,18 @@ class ElectromagneticFieldData(AbstractFieldData, ElectromagneticFieldDataset, A
         }
 
     @property
+    def _grid_corrected_fields(self) -> Dict[str, DataArray]:
+        """Dictionary of field components with finite grid correction factors applied and symmetry
+        expanded."""
+        field_components = self.symmetry_expanded_copy.field_components
+        for field in field_components:
+            if field[0] == "E":
+                field_components[field] *= self.grid_primal_correction
+            elif field[0] == "H":
+                field_components[field] *= self.grid_dual_correction
+        return field_components
+
+    @property
     def _tangential_dims(self) -> List[str]:
         """For a 2D monitor data, return the names of the tangential dimensions. Raise if cannot
         confirm that the associated monitor is 2D."""
@@ -195,35 +207,6 @@ class ElectromagneticFieldData(AbstractFieldData, ElectromagneticFieldDataset, A
         return tangential_dims
 
     @property
-    def _tangential_fields(self) -> Dict[str, DataArray]:
-        """For a 2D monitor data, return a dictionary with only the tangential field components,
-        oriented such that the third component would be the normal axis. This just means that the
-        H field gets an extra minus sign if the normal axis is ``"y"``. Raise if any of the
-        tangential field components is missing.
-
-        Note
-        ----
-            The finite grid correction factors are applied and symmetry is expanded.
-        """
-
-        normal_dim = "xyz"[self.monitor.size.index(0)]
-        field_components = [fname + dim for fname in "EH" for dim in self._tangential_dims]
-        fields_expanded = self.symmetry_expanded_copy.field_components
-        tan_fields = {}
-        for field in field_components:
-            if field not in self.field_components:
-                raise DataError(f"Tangential field component {field} is missing in data.")
-            tan_fields[field] = fields_expanded[field]
-            if field[0] == "E":
-                tan_fields[field] *= self.grid_primal_correction
-            elif field[0] == "H":
-                tan_fields[field] *= self.grid_dual_correction
-                if normal_dim == "y":
-                    tan_fields[field] *= -1
-            tan_fields[field] = tan_fields[field].squeeze(dim=normal_dim, drop=True)
-        return tan_fields
-
-    @property
     def _plane_grid_boundaries(self) -> Tuple[ArrayLike[float, 1], ArrayLike[float, 1]]:
         """For a 2D monitor data, return the boundaries of the in-plane grid to be used to compute
         differential area and to colocate fields to grid centers if needed."""
@@ -233,7 +216,6 @@ class ElectromagneticFieldData(AbstractFieldData, ElectromagneticFieldDataset, A
                 "down-sampled monitor data ('interval_space' > 1 along a direction)."
             )
         dim1, dim2 = self._tangential_dims
-        tan_fields = self._tangential_fields
 
         # In-plane grid bounds inferred from the field data
         if self.monitor.colocate:
@@ -245,10 +227,16 @@ class ElectromagneticFieldData(AbstractFieldData, ElectromagneticFieldDataset, A
             # Last pixel missing compared to sim.discretize(self.monitor, extend=True).
             # This is because we cannot colocate the fields to the center of that pixel.
             # However, the monitor should be completely outside of this last pixel.
-            plane_bounds1 = tan_fields["E" + dim2].coords[dim1].values
-            plane_bounds2 = tan_fields["E" + dim1].coords[dim2].values
+            fields = self.symmetry_expanded_copy.field_components
+            plane_bounds1 = fields["E" + dim2].coords[dim1].values
+            plane_bounds2 = fields["E" + dim1].coords[dim2].values
 
         return plane_bounds1, plane_bounds2
+
+    @property
+    def _plane_grid_centers(self) -> Tuple[ArrayLike[float, 1], ArrayLike[float, 1]]:
+        """For 2D monitor data, return the centers of the in-plane grid"""
+        return [(bs[1:] + bs[:-1]) / 2 for bs in self._plane_grid_boundaries]
 
     @property
     def _diff_area(self) -> xr.DataArray:
@@ -278,27 +266,64 @@ class ElectromagneticFieldData(AbstractFieldData, ElectromagneticFieldDataset, A
         sizes_dim1 = bounds[1][1:] - bounds[1][:-1] if bounds[1].size > 1 else [1.0]
         return xr.DataArray(np.outer(sizes_dim0, sizes_dim1), dims=self._tangential_dims)
 
+    def _tangential_corrected(self, fields: Dict[str, DataArray]) -> Dict[str, DataArray]:
+        """For a 2D monitor data, extract the tangential components from fields and orient them
+        such that the third component would be the normal axis. This just means that the H field
+        gets an extra minus sign if the normal axis is ``"y"``. Raise if any of the tangential
+        field components is missing.
+        """
+        # Tangential field components
+        tan_dims = self._tangential_dims
+        components = [fname + dim for fname in "EH" for dim in tan_dims]
+
+        normal_dim = "xyz"[self.monitor.size.index(0)]
+
+        tan_fields = {}
+        for component in components:
+            if component not in fields:
+                raise DataError(f"Tangential field component {component} missing in field data.")
+
+            if normal_dim == "y" and component[0] == "H":
+                tan_fields[component] = -fields[component]
+            else:
+                tan_fields[component] = fields[component]
+
+        return tan_fields
+
+    @property
+    def _tangential_fields(self) -> Dict[str, DataArray]:
+        """For a 2D monitor data, get the tangential E and H fields in the 2D plane grid.  Fields
+        are oriented such that the third component would be the normal axis. This just means that
+        the H field gets an extra minus sign if the normal axis is ``"y"``.
+
+        Note
+        ----
+            The finite grid correction factors are applied and symmetry is expanded.
+        """
+        return self._tangential_corrected(self._grid_corrected_fields)
+
     @property
     def _centered_fields(self) -> Dict[str, DataArray]:
         """For a 2D monitor data, get all E and H fields colocated to the cell centers in the 2D
-        plane grid."""
+        plane grid.
 
-        fields_expanded = self.symmetry_expanded_copy.field_components
+        Note
+        ----
+            The finite grid correction factors are applied and symmetry is expanded.
+        """
 
-        # Colocate to plane center coordinates
-        bounds = self._plane_grid_boundaries
-        centers = [(bs[1:] + bs[:-1]) / 2 for bs in bounds]
+        field_components = self._grid_corrected_fields
 
         # Interpolate field components to cell centers
         interp_dict = {}
-        for dim, cents in zip(self._tangential_dims, centers):
+        for dim, cents in zip(self._tangential_dims, self._plane_grid_centers):
             if cents.size > 0:
                 interp_dict[dim] = cents
 
         normal_dim = "xyz"[self.monitor.size.index(0)]
         centered_fields = {
             key: val.squeeze(dim=normal_dim, drop=True).interp(**interp_dict)
-            for key, val in fields_expanded.items()
+            for key, val in field_components.items()
         }
 
         return centered_fields
@@ -306,28 +331,15 @@ class ElectromagneticFieldData(AbstractFieldData, ElectromagneticFieldDataset, A
     @property
     def _centered_tangential_fields(self) -> Dict[str, DataArray]:
         """For a 2D monitor data, get the tangential E and H fields colocated to the cell centers in
-        the 2D plane grid."""
+        the 2D plane grid.  Fields are oriented such that the third component would be the normal
+        axis. This just means that the H field gets an extra minus sign if the normal axis is
+        ``"y"``. Raise if any of the tangential field components is missing.
 
-        # Tangential directions and fields
-        tan_dims = self._tangential_dims
-        tan_fields = self._tangential_fields
-
-        if self.monitor.colocate:
-            # Already colocated
-            return tan_fields
-
-        # Colocate to plane center coordinates
-        bounds = self._plane_grid_boundaries
-        centers = [(bs[1:] + bs[:-1]) / 2 for bs in bounds]
-
-        # Interpolate tangential field components to cell centers
-        interp_dict = {}
-        for dim, cents in zip(tan_dims, centers):
-            if cents.size > 0:
-                interp_dict[dim] = cents
-        centered_fields = {key: val.interp(**interp_dict) for key, val in tan_fields.items()}
-
-        return centered_fields
+        Note
+        ----
+            The finite grid correction factors are applied and symmetry is expanded.
+        """
+        return self._tangential_corrected(self._centered_fields)
 
     @property
     def poynting(self) -> ScalarFieldDataArray:
@@ -420,13 +432,36 @@ class ElectromagneticFieldData(AbstractFieldData, ElectromagneticFieldDataset, A
         integrand = (e_self_x_h_other - h_self_x_e_other) * d_area
         return ModeAmpsDataArray(0.25 * integrand.sum(dim=d_area.dims))
 
-    # pylint:disable=too-many-locals
-    def dot_interp(
-        self, field_data: Union[FieldData, ModeSolverData], conjugate: bool = True
+    def interpolated_tangential_fields(self, centers: ArrayLike[float, 2]) -> Dict[str, DataArray]:
+        """For 2D monitors, interpolate this fields to given centers in the tangential plane.
+
+        Parameters
+        ----------
+        centers : ArrayLike[float, 2]
+            Interpolation centers in the monitor's tangential plane.
+
+        Return
+        ------
+            Dictionary with interpolated fields"""
+        fields = self._tangential_fields
+
+        interp_dict = {}
+        for dim, cents in zip(self._tangential_dims, centers):
+            if cents.size > 0:
+                interp_dict[dim] = cents
+
+        kwargs = {"bounds_error": False, "fill_value": 0.0}
+        for component, field in fields.items():
+            fields[component] = field.interp(kwargs=kwargs, **interp_dict)
+
+        return fields
+
+    def outer_dot(
+        self, field_data: Union[FieldData, ModeSolverData], conjugate: bool = False
     ) -> MixedModeDataArray:
         """Dot product (modal overlap) with another :class:`.FieldData` object.
 
-        The tangetial fields from ``field_data`` are interpolated to this objects's grid, so the
+        The tangential fields from ``field_data`` are interpolated to this object's grid, so the
         data arrays don't need to have the same discretization.  The calculation is performed for
         all common frequencies between data arrays.  In the output, ``mode_index_0`` and
         ``mode_index_1`` are the mode indices from this object and ``field_data``, respectively.
@@ -447,7 +482,6 @@ class ElectromagneticFieldData(AbstractFieldData, ElectromagneticFieldDataset, A
 
         tan_dims = self._tangential_dims
 
-        # pylint:disable=protected-access
         assert all(
             a == b for a, b in zip(tan_dims, field_data._tangential_dims)
         ), "tangential dimensions must match"
@@ -455,27 +489,13 @@ class ElectromagneticFieldData(AbstractFieldData, ElectromagneticFieldDataset, A
         # Tangential fields for current
         fields_self = self._centered_tangential_fields
         if conjugate:
-            fields_self = {key: field.conj() for key, field in fields_self.items()}
+            fields_self = {component: field.conj() for component, field in fields_self.items()}
 
         # Tangential fields for other data
-        fields_other = field_data._tangential_fields  # pylint:disable=protected-access
-
-        # Cell centers used for current tangential fields
-        bounds = self._plane_grid_boundaries
-        centers = [(bs[1:] + bs[:-1]) / 2 for bs in bounds]
-
-        # Interpolate fields from other data to cell centers
-        kwargs = {"bounds_error": False, "fill_value": 0.0}
-        interp_dict = {}
-        for dim, cents in zip(tan_dims, centers):
-            if cents.size > 0:
-                interp_dict[dim] = cents
-        fields_other = {
-            key: val.interp(kwargs=kwargs, **interp_dict) for key, val in fields_other.items()
-        }
+        fields_other = field_data.interpolated_tangential_fields(self._plane_grid_centers)
 
         # Tangential field component names
-        dim1, dim2 = self._tangential_dims
+        dim1, dim2 = tan_dims
         e_1 = "E" + dim1
         e_2 = "E" + dim2
         h_1 = "H" + dim1
