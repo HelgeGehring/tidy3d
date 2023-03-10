@@ -20,9 +20,6 @@ from ...log import log, ValidationError
 from ..mode.mode_solver import ModeSolver
 
 
-# TODO: consider bend_radius in mode_spec
-
-
 class RectangularDielectric(Tidy3dBaseModel):
     """General rectangular dielectric waveguide
 
@@ -266,7 +263,7 @@ class RectangularDielectric(Tidy3dBaseModel):
             w += 2 * self.core_thickness * numpy.tan(self.sidewall_angle)
         return w
 
-    # pylint:disable=too-many-locals,too-many-statements
+    # pylint:disable=too-many-locals,too-many-statements,too-many-branches
     @cached_property
     def _structures_and_gridspec(self):
         """Build waveguide structure and custom grid_spec for mode solving"""
@@ -286,8 +283,6 @@ class RectangularDielectric(Tidy3dBaseModel):
         core_w = numpy.array(self.core_width, copy=True)
         core_t = self.core_thickness
         slab_t = self.slab_thickness
-
-        half_length = 0.5 * self.length
 
         normal_origin = self.origin[self.normal_axis]
 
@@ -363,6 +358,41 @@ class RectangularDielectric(Tidy3dBaseModel):
             max_scale=self.max_grid_scaling,
         )
 
+        if self.mode_spec.bend_radius is None or self.mode_spec.bend_radius == 0.0:
+            half_length = 0.5 * self.length
+
+            def polyslab_vertices(x, w):
+                return (
+                    self._transform_in_plane(x, -half_length),
+                    self._transform_in_plane(x + w, -half_length),
+                    self._transform_in_plane(x + w, half_length),
+                    self._transform_in_plane(x, half_length),
+                )
+
+        else:
+            assert (
+                self.mode_spec.bend_axis == 1 if self.normal_axis > self.lateral_axis else 0
+            ), "Bend axis invalid for waveguide curvature"
+
+            bend_radius = self.mode_spec.bend_radius
+            x0 = -bend_radius
+
+            # 10 nm resolution (at center)
+            num_points = 1 + int(0.5 + 1.5 * numpy.pi * abs(bend_radius) / 0.01)
+
+            angles = numpy.linspace(-0.75 * numpy.pi, 0.75 * numpy.pi, num_points)
+            if bend_radius < 0:
+                angles = -angles
+            sin = numpy.sin(angles)
+            cos = numpy.cos(angles)
+
+            def polyslab_vertices(x, w):
+                r_in = bend_radius + x
+                v_in = numpy.vstack((x0 + r_in * cos, r_in * sin)).T
+                r_out = r_in + w
+                v_out = numpy.vstack((x0 + r_out * cos, r_out * sin)).T
+                return [self._transform_in_plane(*v) for v in list(v_out) + list(v_in[::-1])]
+
         # Create the actual waveguide geometry
         structures = []
 
@@ -372,12 +402,7 @@ class RectangularDielectric(Tidy3dBaseModel):
             structures.extend(
                 Structure(
                     geometry=PolySlab(
-                        vertices=(
-                            self._transform_in_plane(x, -half_length),
-                            self._transform_in_plane(x + w, -half_length),
-                            self._transform_in_plane(x + w, half_length),
-                            self._transform_in_plane(x, half_length),
-                        ),
+                        vertices=polyslab_vertices(x, w),
                         slab_bounds=(
                             normal_origin + core_t - self.surface_thickness,
                             normal_origin + core_t,
@@ -415,12 +440,7 @@ class RectangularDielectric(Tidy3dBaseModel):
             structures.extend(
                 Structure(
                     geometry=PolySlab(
-                        vertices=(
-                            self._transform_in_plane(x, -half_length),
-                            self._transform_in_plane(x + w, -half_length),
-                            self._transform_in_plane(x + w, half_length),
-                            self._transform_in_plane(x, half_length),
-                        ),
+                        vertices=polyslab_vertices(x, w),
                         slab_bounds=(normal_origin, normal_origin + core_t),
                         sidewall_angle=self.sidewall_angle,
                         reference_plane="top",
@@ -441,12 +461,7 @@ class RectangularDielectric(Tidy3dBaseModel):
         structures.extend(
             Structure(
                 geometry=PolySlab(
-                    vertices=(
-                        self._transform_in_plane(x, -half_length),
-                        self._transform_in_plane(x + w, -half_length),
-                        self._transform_in_plane(x + w, half_length),
-                        self._transform_in_plane(x, half_length),
-                    ),
+                    vertices=polyslab_vertices(x, w),
                     slab_bounds=(normal_origin, normal_origin + core_t),
                     sidewall_angle=self.sidewall_angle,
                     reference_plane="top",
@@ -486,7 +501,8 @@ class RectangularDielectric(Tidy3dBaseModel):
     @property
     def structures(self):
         """Waveguide structures for simulation, including the core(s), slabs (if any), and bottom
-        cladding, if different from the top."""
+        cladding, if different from the top.  For bend modes, the structure is a 270 degree bend
+        regardless of :attr:`length`."""
 
         return self._structures_and_gridspec[0]
 
@@ -516,7 +532,10 @@ class RectangularDielectric(Tidy3dBaseModel):
         freqs = C_0 / self.wavelength
         structures, grid_spec = self._structures_and_gridspec
 
-        plane = Box(center=self._transform(0, 0, 0), size=self._transform(inf, inf, 0))
+        plane = Box(
+            center=self._transform(0, 0.5 * self.height - self.box_thickness, 0),
+            size=self._transform(self.width, self.height, 0),
+        )
 
         # Source used only to silence warnings
         mode_source = ModeSource(
@@ -528,8 +547,8 @@ class RectangularDielectric(Tidy3dBaseModel):
         )
 
         simulation = Simulation(
-            center=self._transform(0, 0.5 * self.height - self.box_thickness, 0),
-            size=self._transform(self.width, self.height, 0),
+            center=plane.center,
+            size=plane.size,
             medium=self.clad_medium,
             structures=structures,
             boundary_spec=BoundarySpec.all_sides(Periodic()),
