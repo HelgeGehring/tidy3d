@@ -187,12 +187,19 @@ class ElectromagneticFieldData(AbstractFieldData, ElectromagneticFieldDataset, A
     def _grid_corrected_fields(self) -> Dict[str, DataArray]:
         """Dictionary of field components with finite grid correction factors applied and symmetry
         expanded."""
+        normal_dim = "xyz"[self.monitor.size.index(0)]
         field_components = self.symmetry_expanded_copy.field_components
         for field in field_components:
-            if field[0] == "E":
-                field_components[field] *= self.grid_primal_correction
-            elif field[0] == "H":
-                field_components[field] *= self.grid_dual_correction
+            if field[1] == normal_dim:
+                if field[0] == "E":
+                    field_components[field] *= self.grid_dual_correction
+                elif field[0] == "H":
+                    field_components[field] *= self.grid_primal_correction
+            else:
+                if field[0] == "E":
+                    field_components[field] *= self.grid_primal_correction
+                elif field[0] == "H":
+                    field_components[field] *= self.grid_dual_correction
         return field_components
 
     @property
@@ -432,7 +439,7 @@ class ElectromagneticFieldData(AbstractFieldData, ElectromagneticFieldDataset, A
         integrand = (e_self_x_h_other - h_self_x_e_other) * d_area
         return ModeAmpsDataArray(0.25 * integrand.sum(dim=d_area.dims))
 
-    def interpolated_tangential_fields(self, centers: ArrayLike[float, 2]) -> Dict[str, DataArray]:
+    def _interpolated_tangential_fields(self, centers: ArrayLike[float, 2]) -> Dict[str, DataArray]:
         """For 2D monitors, interpolate this fields to given centers in the tangential plane.
 
         Parameters
@@ -458,7 +465,7 @@ class ElectromagneticFieldData(AbstractFieldData, ElectromagneticFieldDataset, A
 
     # pylint: disable=too-many-locals
     def outer_dot(
-        self, field_data: Union[FieldData, ModeSolverData], conjugate: bool = False
+        self, field_data: Union[FieldData, ModeSolverData], conjugate: bool = True
     ) -> MixedModeDataArray:
         """Dot product (modal overlap) with another :class:`.FieldData` object.
 
@@ -494,7 +501,8 @@ class ElectromagneticFieldData(AbstractFieldData, ElectromagneticFieldDataset, A
             fields_self = {component: field.conj() for component, field in fields_self.items()}
 
         # Tangential fields for other data
-        fields_other = field_data.interpolated_tangential_fields(self._plane_grid_centers)
+        # pylint:disable=protected-access
+        fields_other = field_data._interpolated_tangential_fields(self._plane_grid_centers)
 
         # Tangential field component names
         dim1, dim2 = tan_dims
