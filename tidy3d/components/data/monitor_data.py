@@ -187,7 +187,9 @@ class ElectromagneticFieldData(AbstractFieldData, ElectromagneticFieldDataset, A
     def _grid_corrected_fields(self) -> Dict[str, DataArray]:
         """Dictionary of field components with finite grid correction factors applied and symmetry
         expanded."""
-        normal_dim = "xyz"[self.monitor.size.index(0)]
+        if len(self.monitor.zero_dims) != 1:
+            raise DataError("Data must be 2D to apply grid corrections.")
+        normal_dim = "xyz"[self.monitor.zero_dims[0]]
         field_components = self.symmetry_expanded_copy.field_components
         for field in field_components:
             if field[1] == normal_dim:
