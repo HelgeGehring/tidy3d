@@ -15,7 +15,7 @@ from ...components.structure import Structure
 from ...components.types import ArrayLike, Axis, Coordinate, Size1D, Union
 from ...constants import C_0, inf, MICROMETER, RADIAN
 
-from ...log import log, ValidationError
+from ...log import log, Tidy3dError, ValidationError
 
 from ..mode.mode_solver import ModeSolver
 
@@ -33,64 +33,75 @@ class RectangularDielectric(Tidy3dBaseModel):
 
     wavelength: Union[float, ArrayLike[float, 1]] = pydantic.Field(
         ...,
+        title="Wavelength",
         description="Wavelength(s) at which to calculate modes (in μm).",
         units=MICROMETER,
     )
 
-    core_width: Union[float, ArrayLike[float, 1]] = pydantic.Field(
+    core_width: Union[Size1D, ArrayLike[Size1D, 1]] = pydantic.Field(
         ...,
+        title="Core width",
         description="Core width at the top of the waveguide.  If set to an array, defines "
         "the widths of adjacent waveguides.",
         units=MICROMETER,
     )
 
-    core_thickness: float = pydantic.Field(
+    core_thickness: Size1D = pydantic.Field(
         ...,
+        title="Core Thickness",
         description="Thickness of the core layer.",
         units=MICROMETER,
     )
 
     core_medium: MediumType = pydantic.Field(
         ...,
+        title="Core Medium",
         description="Medium associated with the core layer.",
     )
 
     clad_medium: MediumType = pydantic.Field(
         ...,
+        title="Clad Medium",
         description="Medium associated with the upper cladding layer.",
     )
 
     box_medium: MediumType = pydantic.Field(
         None,
+        title="Box Medium",
         description="Medium associated with the lower cladding layer.",
     )
 
-    slab_thickness: float = pydantic.Field(
+    slab_thickness: Size1D = pydantic.Field(
         0.0,
+        title="Slab Thickness",
         description="Thickness of the slab for rib geometry.",
         units=MICROMETER,
     )
 
-    clad_thickness: float = pydantic.Field(
+    clad_thickness: Size1D = pydantic.Field(
         None,
+        title="Clad Thickness",
         description="Domain size above the core layer.",
         units=MICROMETER,
     )
 
-    box_thickness: float = pydantic.Field(
+    box_thickness: Size1D = pydantic.Field(
         None,
+        title="Box Thickness",
         description="Domain size below the core layer.",
         units=MICROMETER,
     )
 
-    side_margin: float = pydantic.Field(
+    side_margin: Size1D = pydantic.Field(
         None,
+        title="Side Margin",
         description="Domain size to the sides of the waveguide core.",
         units=MICROMETER,
     )
 
     sidewall_angle: float = pydantic.Field(
         0.0,
+        title="Sidewall Angle",
         description="Angle of the core sidewalls measured from the vertical direction (in "
         "radians).  Positive (negative) values create waveguides with bases wider (narrower) "
         "than their tops.",
@@ -99,24 +110,28 @@ class RectangularDielectric(Tidy3dBaseModel):
 
     gap: Union[float, ArrayLike[float, 1]] = pydantic.Field(
         0.0,
+        title="Gap",
         description="Distance between adjacent waveguides, measured at the top core edges.  "
         "An array can be used to define one gap per pair of adjacent waveguides.",
         units=MICROMETER,
     )
 
-    sidewall_thickness: float = pydantic.Field(
+    sidewall_thickness: Size1D = pydantic.Field(
         0.0,
+        title="Sidewall Thickness",
         description="Sidewall layer thickness (within core).",
         units=MICROMETER,
     )
 
     sidewall_medium: MediumType = pydantic.Field(
         None,
+        title="Sidewall medium",
         description="Medium associated with the sidewall layer to model sidewall losses.",
     )
 
-    surface_thickness: float = pydantic.Field(
+    surface_thickness: Size1D = pydantic.Field(
         0.0,
+        title="Surface Thickness",
         description="Thickness of the surface layers defined on the top of the waveguide and  "
         "slab regions (if any).",
         units=MICROMETER,
@@ -124,11 +139,13 @@ class RectangularDielectric(Tidy3dBaseModel):
 
     surface_medium: MediumType = pydantic.Field(
         None,
+        title="Surface Medium",
         description="Medium associated with the surface layer to model surface losses.",
     )
 
     origin: Coordinate = pydantic.Field(
         (0, 0, 0),
+        title="Origin",
         description="Center of the waveguide geometry.  This coordinate represents the base "
         "of the waveguides (substrate surface) in the normal axis, and center of the geometry "
         "in the remaining axes.",
@@ -137,32 +154,38 @@ class RectangularDielectric(Tidy3dBaseModel):
 
     length: Size1D = pydantic.Field(
         1e30,
+        title="Length",
         description="Length of the waveguides in the propagation direction",
         units=MICROMETER,
     )
 
     propagation_axis: Axis = pydantic.Field(
         0,
+        title="Propagation Axis",
         description="Axis of propagation of the waveguide",
     )
 
     normal_axis: Axis = pydantic.Field(
         2,
+        title="Normal Axis",
         description="Axis normal to the substrate surface",
     )
 
     mode_spec: ModeSpec = pydantic.Field(
         ModeSpec(),
+        title="Mode Specification",
         description=":class:`ModeSpec` defining waveguide mode properties.",
     )
 
     grid_resolution: int = pydantic.Field(
         15,
+        title="Grid Resolution",
         description="Solver grid resolution per wavelength.",
     )
 
     max_grid_scaling: float = pydantic.Field(
         1.2,
+        title="Maximal Grid Scaling",
         description="Maximal size increase between adjacent grid boundaries.",
     )
 
@@ -370,9 +393,11 @@ class RectangularDielectric(Tidy3dBaseModel):
                 )
 
         else:
-            assert (
-                self.mode_spec.bend_axis == 1 if self.normal_axis > self.lateral_axis else 0
-            ), "Bend axis invalid for waveguide curvature"
+            if (self.normal_axis > self.lateral_axis) != (self.mode_spec.bend_axis == 1):
+                raise Tidy3dError(
+                    "Waveguide band axis must be the substrate normal "
+                    f"(mode_spec.bend_axis = {1 - self.mode_spec.bend_axis})"
+                )
 
             bend_radius = self.mode_spec.bend_radius
             x0 = -bend_radius
