@@ -173,13 +173,13 @@ class RectangularDielectric(Tidy3dBaseModel):
     )
 
     mode_spec: ModeSpec = pydantic.Field(
-        ModeSpec(),
+        ModeSpec(num_modes=2, precision="double"),
         title="Mode Specification",
         description=":class:`ModeSpec` defining waveguide mode properties.",
     )
 
     grid_resolution: int = pydantic.Field(
-        15,
+        20,
         title="Grid Resolution",
         description="Solver grid resolution per wavelength.",
     )
@@ -617,17 +617,17 @@ class RectangularDielectric(Tidy3dBaseModel):
     def calculate_group_index(
         self, wavelength_step: pydantic.PositiveFloat = 0.005
     ) -> ModeIndexDataArray:
-        """Calculate the group index.
-    
+        r"""Calculate the group index.
+
         The group index is numerically calculated as
         $$ n_g = n_\text{eff} - \lambda \frac{\mathrm d n_\text{eff}}{\mathrm d\lambda} $$
         with a central difference algorithm used to approximate the differential.
-    
+
         Parameters
         ----------
         wavelength_step : `pydantic.PositiveFloat`
             Wavelength step used for the numerical differentiation.
-    
+
         Returns
         -------
         :class:`FreqModeDataArray`
@@ -636,13 +636,17 @@ class RectangularDielectric(Tidy3dBaseModel):
         # We have to solve all frequencies in a single waveguide because we want to take advantage
         # of mode tracking
         wavelength = [
-            x for lda in self.wavelength.values
+            x
+            for lda in self.wavelength.values
             for x in (lda - wavelength_step, lda, lda + wavelength_step)
         ]
-        wg = self.copy(update={"wavelength": wavelength})
+        waveguide = self.copy(update={"wavelength": wavelength})
         end = len(wavelength)
-        nb = wg.n_eff.isel(f=slice(0, end, 3)).values
-        n0 = wg.n_eff.isel(f=slice(1, end, 3)).values
-        nf = wg.n_eff.isel(f=slice(2, end, 3)).values
-        ng = numpy.array(n0 - (self.wavelength.values / (2 * wavelength_step) * (nf - nb).T).T)
-        return ModeIndexDataArray(ng, coords=self.n_eff.coords)
+        n_backward = waveguide.n_eff.isel(f=slice(0, end, 3)).values
+        n_center = waveguide.n_eff.isel(f=slice(1, end, 3)).values
+        n_forward = waveguide.n_eff.isel(f=slice(2, end, 3)).values
+        n_group = numpy.array(
+            n_center
+            - (self.wavelength.values / (2 * wavelength_step) * (n_forward - n_backward).T).T
+        )
+        return ModeIndexDataArray(n_group, coords=self.n_eff.coords)
