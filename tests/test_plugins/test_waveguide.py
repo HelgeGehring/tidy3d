@@ -40,20 +40,20 @@ def test_rectangular_dielectric_validations():
 
 def test_rectangular_dielectric_strip():
     """Rectangular dielectric strip waveguide"""
-    mode_data = waveguide.RectangularDielectric(
+    wg = waveguide.RectangularDielectric(
         wavelength=1.55,
         core_width=0.5,
         core_thickness=0.22,
         core_medium=td.Medium(permittivity=3.48**2),
         clad_medium=td.Medium(permittivity=1.45**2),
         mode_spec=td.ModeSpec(num_modes=2),
-    ).mode_solver.solve()
-    assert np.allclose(mode_data.n_eff.values, [2.4536054, 1.7850305])
+    )
+    assert np.allclose(wg.n_eff.values, [2.4536054, 1.7850305])
 
 
 def test_rectangular_dielectric_rib():
     """Rectangular dielectric rib waveguide"""
-    mode_data = waveguide.RectangularDielectric(
+    wg = waveguide.RectangularDielectric(
         wavelength=1.55,
         core_width=0.45,
         core_thickness=0.22,
@@ -63,13 +63,13 @@ def test_rectangular_dielectric_rib():
         box_medium=td.Medium(permittivity=1.45**2),
         sidewall_angle=0.5,
         mode_spec=td.ModeSpec(num_modes=1),
-    ).mode_solver.solve()
-    assert np.allclose(mode_data.n_eff.values, [2.5560536])
+    )
+    assert np.allclose(wg.n_eff.values, [2.5560536])
 
 
 def test_rectangular_dielectric_coupled():
     """Rectangular dielectric coupled waveguides"""
-    mode_data = waveguide.RectangularDielectric(
+    wg = waveguide.RectangularDielectric(
         wavelength=1.55,
         core_width=[0.38, 0.38],
         core_thickness=0.22,
@@ -78,5 +78,5 @@ def test_rectangular_dielectric_coupled():
         sidewall_angle=0.2,
         gap=0.1,
         mode_spec=td.ModeSpec(num_modes=4),
-    ).mode_solver.solve()
-    assert np.allclose(mode_data.n_eff.values, [2.4453077, 2.2707212, 1.8694501, 1.5907708])
+    )
+    assert np.allclose(wg.n_eff.values, [2.4453077, 2.2707212, 1.8694501, 1.5907708])
