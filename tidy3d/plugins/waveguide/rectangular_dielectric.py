@@ -259,17 +259,27 @@ class RectangularDielectric(Tidy3dBaseModel):
         """Lateral direction axis"""
         return 3 - self.propagation_axis - self.normal_axis
 
-    def _transform(self, lateral_coordinate, normal_coordinate, propagation_coordinate):
-        """Swap the model coordinates to desired axes and translate to origin"""
-        result = list(self.origin)
-        result[self.lateral_axis] += lateral_coordinate
-        result[self.propagation_axis] += propagation_coordinate
-        result[self.normal_axis] += normal_coordinate
+    def _swizzle(self, lateral_coord, normal_coord, propagation_coord):
+        """Swap the model coordinates to desired axes"""
+        result = [None, None, None]
+        result[self.lateral_axis] = lateral_coord
+        result[self.propagation_axis] = propagation_coord
+        result[self.normal_axis] = normal_coord
         return result
 
-    def _transform_in_plane(self, lateral_coordinate, propagation_coordinate):
+    def _translate(self, lateral_coord, normal_coord, propagation_coord):
+        """Swap the model coordinates to desired axes and translate to origin"""
+        result = [
+            a + b
+            for a, b in zip(
+                self.origin, self._swizzle(lateral_coord, normal_coord, propagation_coord)
+            )
+        ]
+        return result
+
+    def _transform_in_plane(self, lateral_coord, propagation_coord):
         """Swap the model coordinates to desired axes in the substrate plane"""
-        result = self._transform(lateral_coordinate, 0, propagation_coordinate)
+        result = self._translate(lateral_coord, 0, propagation_coord)
         result.pop(self.normal_axis)
         return result
 
@@ -355,8 +365,8 @@ class RectangularDielectric(Tidy3dBaseModel):
         override_structures = [
             Structure(
                 geometry=Box(
-                    center=self._transform(0.5 * (a + b), y, 0),
-                    size=self._transform(b - a, dy, inf),
+                    center=self._translate(0.5 * (a + b), y, 0),
+                    size=self._swizzle(b - a, dy, inf),
                 ),
                 medium=hi_index,
             )
@@ -365,8 +375,8 @@ class RectangularDielectric(Tidy3dBaseModel):
         ] + [
             Structure(
                 geometry=Box(
-                    center=self._transform(0.5 * (a + b), 0, 0),
-                    size=self._transform(b - a, inf, inf),
+                    center=self._translate(0.5 * (a + b), 0, 0),
+                    size=self._swizzle(b - a, inf, inf),
                 ),
                 medium=lo_index,
             )
@@ -446,8 +456,8 @@ class RectangularDielectric(Tidy3dBaseModel):
                 structures.append(
                     Structure(
                         geometry=Box(
-                            center=self._transform(0, 0.5 * slab_t, 0),
-                            size=self._transform(inf, slab_t, inf),
+                            center=self._translate(0, 0.5 * slab_t, 0),
+                            size=self._swizzle(inf, slab_t, self.length),
                         ),
                         medium=self.surface_medium,
                     )
@@ -502,8 +512,8 @@ class RectangularDielectric(Tidy3dBaseModel):
             structures.append(
                 Structure(
                     geometry=Box(
-                        center=self._transform(0, 0.5 * slab_t, 0),
-                        size=self._transform(inf, slab_t, inf),
+                        center=self._translate(0, 0.5 * slab_t, 0),
+                        size=self._swizzle(inf, slab_t, self.length),
                     ),
                     medium=self.core_medium,
                 )
@@ -514,8 +524,8 @@ class RectangularDielectric(Tidy3dBaseModel):
             structures.append(
                 Structure(
                     geometry=Box(
-                        center=self._transform(0, -self.box_thickness, 0),
-                        size=self._transform(inf, 2 * self.box_thickness, inf),
+                        center=self._translate(0, -self.box_thickness, 0),
+                        size=self._swizzle(inf, 2 * self.box_thickness, self.length),
                     ),
                     medium=self.box_medium,
                 )
@@ -558,8 +568,8 @@ class RectangularDielectric(Tidy3dBaseModel):
         structures, grid_spec = self._structures_and_gridspec
 
         plane = Box(
-            center=self._transform(0, 0.5 * self.height - self.box_thickness, 0),
-            size=self._transform(self.width, self.height, 0),
+            center=self._translate(0, 0.5 * self.height - self.box_thickness, 0),
+            size=self._swizzle(self.width, self.height, 0),
         )
 
         # Source used only to silence warnings
