@@ -189,11 +189,15 @@ class RectangularDielectric(Tidy3dBaseModel):
         description="Maximal size increase between adjacent grid boundaries.",
     )
 
-    @pydantic.validator("wavelength", "core_width", "gap", always=True)
+    @pydantic.validator("wavelength", always=True)
+    def _set_dataarray(cls, val):
+        wavelength = numpy.array(val, ndmin=1)
+        freqs = C_0 / wavelength
+        return FreqDataArray(wavelength, coords={"f": freqs})
+
+    @pydantic.validator("core_width", "gap", always=True)
     def _set_array(cls, val):
-        if isinstance(val, float):
-            return numpy.array((val,))
-        return numpy.array(val)
+        return numpy.array(val, ndmin=1)
 
     @pydantic.validator("box_medium", always=True)
     def _set_box_medium(cls, val, values):
@@ -202,20 +206,20 @@ class RectangularDielectric(Tidy3dBaseModel):
     @pydantic.validator("clad_thickness", always=True)
     def _set_clad_thickness(cls, val, values):
         if val is None:
-            wavelength = values["wavelength"]
+            freqs = values["wavelength"].coords["f"].values
             medium = values["clad_medium"]
-            n = numpy.array([medium.nk_model(f)[0] for f in C_0 / wavelength])
-            lda = wavelength / n
+            n = numpy.array([medium.nk_model(f)[0] for f in freqs])
+            lda = values["wavelength"].values / n
             return 1.5 * lda.max()
         return val
 
     @pydantic.validator("box_thickness", always=True)
     def _set_box_thickness(cls, val, values):
         if val is None:
-            wavelength = values["wavelength"]
+            freqs = values["wavelength"].coords["f"].values
             medium = values["box_medium"]
-            n = numpy.array([medium.nk_model(f)[0] for f in C_0 / wavelength])
-            lda = wavelength / n
+            n = numpy.array([medium.nk_model(f)[0] for f in freqs])
+            lda = values["wavelength"].values / n
             return 1.5 * lda.max()
         return val
 
@@ -301,15 +305,13 @@ class RectangularDielectric(Tidy3dBaseModel):
     def _structures_and_gridspec(self):
         """Build waveguide structure and custom grid_spec for mode solving"""
 
-        # Domain size
-
-        freqs = C_0 / self.wavelength
+        freqs = self.wavelength.coords["f"].values
         nk_core = numpy.array([self.core_medium.nk_model(f) for f in freqs])
         nk_clad = numpy.array([self.clad_medium.nk_model(f) for f in freqs])
         nk_box = numpy.array([self.box_medium.nk_model(f) for f in freqs])
-        lda_core = self.wavelength / nk_core[:, 0]
-        lda_clad = self.wavelength / nk_clad[:, 0]
-        lda_box = self.wavelength / nk_box[:, 0]
+        lda_core = self.wavelength.values / nk_core[:, 0]
+        lda_clad = self.wavelength.values / nk_clad[:, 0]
+        lda_box = self.wavelength.values / nk_box[:, 0]
 
         # Create a local copy of these values, as they will be modified
         # according to the desired geometry
@@ -386,7 +388,7 @@ class RectangularDielectric(Tidy3dBaseModel):
         # Set up the grid with overriding geometry
         grid_spec = GridSpec.auto(
             min_steps_per_wvl=self.grid_resolution,
-            wavelength=self.wavelength.min(),
+            wavelength=self.wavelength.values.min(),
             override_structures=override_structures,
             max_scale=self.max_grid_scaling,
         )
@@ -564,7 +566,7 @@ class RectangularDielectric(Tidy3dBaseModel):
         array([[2.4536054 1.7850305]], dtype=float32)
 
         """
-        freqs = C_0 / self.wavelength
+        freqs = self.wavelength.coords["f"].values
         structures, grid_spec = self._structures_and_gridspec
 
         plane = Box(
