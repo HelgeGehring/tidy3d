@@ -12,6 +12,7 @@ from ..simulation import Simulation
 from ..boundary import BlochBoundary
 from ..source import TFSF
 from ..types import Ax, Axis, annotate_type, Literal, PlotVal
+from ..types import Ax, Axis, annotate_type, FieldVal
 from ..viz import equal_aspect, add_ax_if_none
 from ...log import DataError, log, Tidy3dKeyError, ValidationError
 
@@ -227,27 +228,140 @@ class SimulationData(Tidy3dBaseModel):
             DataArray containing the electric intensity of the field-like monitor.
             Data is interpolated to the center locations on Yee grid.
         """
+        return self.get_derived_field(
+            field_monitor_name=field_monitor_name, field_name="E", val="abs^2"
+        )
+
+    # pylint: disable=too-many-branches,too-many-statements,too-many-locals
+    def get_derived_field(self, field_monitor_name: str, field_name: str, val: FieldVal):
+        """return `xarray.DataArray` of the intensity of a field monitor at Yee cell centers.
+
+        Parameters
+        ----------
+        field_monitor_name : str
+            Name of field monitor used in the original :class:`Simulation`.
+        field_name : str
+            Name of the derived field component: one of `('E', 'H', 'S', 'Sx', 'Sy', 'Sz')`.
+        val : Literal['real', 'imag', 'abs', 'abs^2', 'dB'] = 'real'
+            Which part of the field to plot.
+
+        Returns
+        -------
+        xarray.DataArray
+            DataArray containing the electric intensity of the field-like monitor.
+            Data is interpolated to the center locations on Yee grid.
+        """
 
         field_dataset = self.at_centers(field_monitor_name)
 
-        field_components = ("Ex", "Ey", "Ez")
-        if not all(field_cmp in field_dataset for field_cmp in field_components):
-            raise DataError(
-                "Field monitor must contain 'Ex', 'Ey', and 'Ez' fields to compute intensity."
-            )
+        if field_name in ("Sx", "Sy", "Sz"):
+            # Gather required components
+            dir_s = "xyz".index(field_name[1])
+            dim_1 = "xyz"[dir_s - 2]
+            dim_2 = "xyz"[dir_s - 1]
 
-        intensity_data = 0.0
-        for field_cmp in field_components:
-            field_cmp_data = field_dataset.data_vars[field_cmp]
-            intensity_data += abs(field_cmp_data) ** 2
-        intensity_data.name = "Intensity"
-        return intensity_data
+            required_components = [f + c for f in "EH" for c in (dim_1, dim_2)]
+            if not all(field_cmp in field_dataset for field_cmp in required_components):
+                raise DataError(
+                    f"Field monitor must contain {dim_1} and {dim_2} components of both E and H "
+                    f"fields to compute {field_name}."
+                )
 
-    def plot_field(  # pylint:disable=too-many-arguments, too-many-locals, too-many-branches
+            e_1 = field_dataset.data_vars["E" + dim_1]
+            e_2 = field_dataset.data_vars["E" + dim_2]
+            h_1 = field_dataset.data_vars["H" + dim_1]
+            h_2 = field_dataset.data_vars["H" + dim_2]
+
+            # Poynting vector component from S = E × H
+            derived_data = e_1 * h_2 - e_2 * h_1
+
+            if val == "real":
+                derived_data = derived_data.real
+                derived_data.name = f"Re{{{field_name}}}"
+
+            elif val == "imag":
+                derived_data = derived_data.imag
+                derived_data.name = f"Im{{{field_name}}}"
+
+            elif val == "abs":
+                derived_data = np.abs(derived_data)
+                derived_data.name = f"|{field_name}|"
+
+            elif val == "abs^2":
+                derived_data = np.abs(derived_data) ** 2
+                derived_data.name = f"|{field_name}|²"
+
+            elif val == "dB":
+                derived_data = 20 * np.log10(np.abs(derived_data))
+                derived_data.name = f"|{field_name}| (dB)"
+
+            return derived_data
+
+        if field_name in ("E", "H", "S"):
+            # Gather vector components
+            if field_name == "S":
+                required_components = [f + c for f in "EH" for c in "xyz"]
+                if not all(field_cmp in field_dataset for field_cmp in required_components):
+                    raise DataError(
+                        "Field monitor must contain x, y, and z components of both E and H fields "
+                        "to compute the Poynting vector."
+                    )
+                e_x = field_dataset.data_vars["Ex"]
+                e_y = field_dataset.data_vars["Ey"]
+                e_z = field_dataset.data_vars["Ez"]
+                h_x = field_dataset.data_vars["Hx"]
+                h_y = field_dataset.data_vars["Hy"]
+                h_z = field_dataset.data_vars["Hz"]
+
+                # Poynting vector S = E × H
+                field_components = (
+                    e_y * h_z - e_z * h_y,  # Sx
+                    e_z * h_x - e_x * h_z,  # Sy
+                    e_x * h_y - e_y * h_x,  # Sz
+                )
+
+            else:
+                required_components = [field_name + c for c in "xyz"]
+                if not all(field_cmp in field_dataset for field_cmp in required_components):
+                    raise DataError(
+                        f"Field monitor must contain '{field_name}x', '{field_name}y', and "
+                        f"'{field_name}z' fields to compute '{field_name}."
+                    )
+                field_components = (field_dataset[c] for c in required_components)
+
+            # Apply the requested transformation
+            if val == "real":
+                derived_data = sum(f.real**2 for f in field_components) ** 0.5
+                derived_data.name = f"|Re{{{field_name}}}|"
+
+            elif val == "imag":
+                derived_data = sum(f.imag**2 for f in field_components) ** 0.5
+                derived_data.name = f"|Im{{{field_name}}}|"
+
+            elif val == "abs":
+                derived_data = sum(np.abs(f) ** 2 for f in field_components) ** 0.5
+                derived_data.name = f"|{field_name}|"
+
+            elif val == "abs^2":
+                derived_data = sum(np.abs(f) ** 2 for f in field_components)
+                derived_data.name = f"|{field_name}|²"
+
+            elif val == "dB":
+                derived_data = 10 * np.log10(sum(np.abs(f) ** 2 for f in field_components))
+                derived_data.name = f"|{field_name}| (dB)"
+
+            return derived_data
+
+        raise Tidy3dKeyError(
+            "Derived field name must be one of 'E', 'H', or 'S', received '{field_name}'."
+        )
+
+    # pylint: disable=too-many-statements,too-many-arguments,too-many-locals
+    def plot_field(
         self,
         field_monitor_name: str,
         field_name: str,
-        val: PlotVal = "real",
+        val: FieldVal = "real",
         eps_alpha: float = 0.2,
         robust: bool = True,
         vmin: float = None,
@@ -264,10 +378,10 @@ class SimulationData(Tidy3dBaseModel):
             to plot.
         field_name : str
             Name of `field` component to plot (eg. `'Ex'`).
-            Also accepts `'int'` to plot intensity.
-        val : Literal['real', 'imag', 'abs'] = 'real'
+            Also accepts `'E'` and `'H'` to plot the vector magnitudes of the electric and
+            magnetic fields, and `'S'` for the Poynting vector.
+        val : Literal['real', 'imag', 'abs', 'abs^2', 'dB'] = 'real'
             Which part of the field to plot.
-            If ``field_name='int'``, this has no effect.
         eps_alpha : float = 0.2
             Opacity of the structure permittivity.
             Must be between 0 and 1 (inclusive).
@@ -298,17 +412,46 @@ class SimulationData(Tidy3dBaseModel):
 
         # get the DataArray corresponding to the monitor_name and field_name
 
-        # intensity
+        # deprecated intensity
         if field_name == "int":
-            field_data = self.get_intensity(field_monitor_name)
-            val = "abs"
+            log.warning(
+                "'int' field name is deprecated and will be removed in the future. Plese use "
+                "field_name='E' and val='abs^2' for the same effect."
+            )
+            field_name = "E"
+            val = "abs^2"
 
-        # normal case (eg. Ex)
+        if field_name in ("E", "H") or field_name[0] == "S":
+            # Derived fields
+            field_data = self.get_derived_field(field_monitor_name, field_name, val)
+            divergent_cmap = len(field_name) == 2 and val in ("real", "imag")
         else:
+            # Direct field component (e.g. Ex)
             field_monitor_data = self.load_field_monitor(field_monitor_name)
             if field_name not in field_monitor_data.field_components:
                 raise DataError(f"field_name '{field_name}' not found in data.")
             field_data = field_monitor_data.field_components[field_name]
+
+            if val == "real":
+                field_data = field_data.real
+                field_data.name = f"Re{{{field_name}}}"
+                divergent_cmap = True
+            elif val == "imag":
+                field_data = field_data.imag
+                field_data.name = f"Im{{{field_name}}}"
+                divergent_cmap = True
+            elif val == "abs":
+                field_data = np.abs(field_data)
+                field_data.name = f"|{field_name}|"
+                divergent_cmap = False
+            elif val == "abs^2":
+                field_data = np.abs(field_data) ** 2
+                field_data.name = f"|{field_name}|²"
+                divergent_cmap = False
+            elif val == "dB":
+                field_data = 20 * np.log10(np.abs(field_data))
+                field_data.name = f"|{field_name}| (dB)"
+                divergent_cmap = False
 
         # interp out any monitor.size==0 dimensions
         monitor = self.simulation.get_monitor_by_name(field_monitor_name)
@@ -326,14 +469,16 @@ class SimulationData(Tidy3dBaseModel):
         # warn about new API changes and replace the values
         if "freq" in sel_kwargs:
             log.warning(
-                "'freq' suppled to 'plot_field', frequency selection key renamed to 'f' and 'freq' "
-                "will error in future release, please update your local script to use 'f=value'."
+                "'freq' supplied to 'plot_field', frequency selection key renamed to 'f' and "
+                "'freq' will error in future release, please update your local script to use "
+                "'f=value'."
             )
             sel_kwargs["f"] = sel_kwargs.pop("freq")
         if "time" in sel_kwargs:
             log.warning(
-                "'time' suppled to 'plot_field', frequency selection key renamed to 't' and 'time' "
-                "will error in future release, please update your local script to use 't=value'."
+                "'time' supplied to 'plot_field', frequency selection key renamed to 't' and "
+                "'time' will error in future release, please update your local script to use "
+                "'t=value'."
             )
             sel_kwargs["t"] = sel_kwargs.pop("time")
 
@@ -345,8 +490,18 @@ class SimulationData(Tidy3dBaseModel):
                 field_data = field_data.interp(
                     **{coord_name: coord_val}, kwargs=dict(bounds_error=True)
                 )
+
+        # before dropping coordinates, check if a frequency can be derived from the data that can
+        # be used to plot material permittivity
+        if "f" in sel_kwargs:
+            freq_eps_eval = sel_kwargs["f"]
+        elif "f" in field_data.coords:
+            freq_eps_eval = field_data.coords["f"].values[0]
+        else:
+            freq_eps_eval = None
+
         field_data = field_data.squeeze(drop=True)
-        non_scalar_coords = {name: val for name, val in field_data.coords.items() if val.size > 1}
+        non_scalar_coords = {name: c for name, c in field_data.coords.items() if c.size > 1}
 
         # assert the data is valid for plotting
         if len(non_scalar_coords) != 2:
@@ -368,39 +523,37 @@ class SimulationData(Tidy3dBaseModel):
             )
 
         # get the spatial coordinate corresponding to the plane
-        planar_coord = [name for name, val in spatial_coords_in_data.items() if val is False][0]
+        planar_coord = [name for name, c in spatial_coords_in_data.items() if c is False][0]
         axis = "xyz".index(planar_coord)
         position = float(field_data.coords[planar_coord])
 
-        # the frequency at which to evaluate the permittivity with None signaling freq -> inf
-        freq_eps_eval = sel_kwargs["f"] if "f" in sel_kwargs else None
-        return self.plot_field_array(
+        return self.plot_scalar_array(
             field_data=field_data,
             axis=axis,
             position=position,
-            val=val,
             freq=freq_eps_eval,
             eps_alpha=eps_alpha,
             robust=robust,
             vmin=vmin,
             vmax=vmax,
+            divergent_cmap=divergent_cmap,
             ax=ax,
         )
 
+    # pylint: disable=too-many-locals,too-many-arguments
     @equal_aspect
     @add_ax_if_none
-    # pylint:disable=too-many-arguments, too-many-locals, too-many-branches, too-many-statements
-    def plot_field_array(
+    def plot_scalar_array(
         self,
         field_data: xr.DataArray,
         axis: Axis,
         position: float,
-        val: Literal["real", "imag", "abs"] = "real",
         freq: float = None,
         eps_alpha: float = 0.2,
         robust: bool = True,
         vmin: float = None,
         vmax: float = None,
+        divergent_cmap: bool = True,
         ax: Ax = None,
     ) -> Ax:
         """Plot the field data for a monitor with simulation plot overlayed.
@@ -409,12 +562,11 @@ class SimulationData(Tidy3dBaseModel):
         ----------
         field_data: xr.DataArray
             DataArray with the field data to plot.
+            Must be a scalar field.
         axis: Axis
             Axis normal to the plotting plane.
         position: float
             Position along the axis.
-        val : Literal['real', 'imag', 'abs'] = 'real'
-            Which part of the field to plot.
         freq: float = None
             Frequency at which the permittivity is evaluated at (if dispersive).
             By default, chooses permittivity as frequency goes to infinity.
@@ -431,6 +583,8 @@ class SimulationData(Tidy3dBaseModel):
         vmax : float = None
             The upper bound of data range that the colormap covers. If `None`, they are
             inferred from the data and other keyword arguments.
+        divergent_cmap : bool = True
+            Whether to use a divergent colormap to plot the data.
         ax : matplotlib.axes._subplots.Axes = None
             matplotlib axes to plot on, if not specified, one is created.
 
@@ -443,30 +597,29 @@ class SimulationData(Tidy3dBaseModel):
         # select the cross section data
         interp_kwarg = {"xyz"[axis]: position}
 
-        # select the field value
-        if val not in ("real", "imag", "abs"):
-            raise DataError(f"`val` must be one of `{'real', 'imag', 'abs'}`, given {val}.")
-
-        if val == "real":
-            field_data = field_data.real
-        elif val == "imag":
-            field_data = field_data.imag
-        elif val == "abs":
-            field_data = abs(field_data)
-
-        if val == "abs":
-            cmap = "magma"
-            eps_reverse = True
-        else:
+        if divergent_cmap:
             cmap = "RdBu"
+            center = 0.0
             eps_reverse = False
+        else:
+            cmap = "magma"
+            center = False
+            eps_reverse = True
 
         # plot the field
         xy_coord_labels = list("xyz")
         xy_coord_labels.pop(axis)
         x_coord_label, y_coord_label = xy_coord_labels[0], xy_coord_labels[1]
         field_data.plot(
-            ax=ax, x=x_coord_label, y=y_coord_label, cmap=cmap, vmin=vmin, vmax=vmax, robust=robust
+            ax=ax,
+            x=x_coord_label,
+            y=y_coord_label,
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+            robust=robust,
+            center=center,
+            cbar_kwargs={"label": field_data.name},
         )
 
         # plot the simulation epsilon
