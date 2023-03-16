@@ -2147,7 +2147,12 @@ class Simulation(Box):  # pylint:disable=too-many-public-methods
         dl_mins = [np.min(sizes) for sizes in self.grid.sizes.to_list]
         dl_sum_inv_sq = sum((1 / dl**2 for dl in dl_mins))
         dl_avg = 1 / np.sqrt(dl_sum_inv_sq)
-        return self.courant * dl_avg / C_0
+        # material factor
+        n_cfl = 1.0
+        for mat in self.mediums:
+            n_cfl = min(n_cfl, mat.n_cfl)
+        print(n_cfl)
+        return n_cfl * self.courant * dl_avg / C_0
 
     @cached_property
     def tmesh(self) -> Coords1D:
