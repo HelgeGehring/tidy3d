@@ -129,8 +129,8 @@ class AbstractMedium(ABC, Tidy3dBaseModel):
     def n_cfl(self):
         """To ensure a stable FDTD simulation, it is essential to select an appropriate
         time step size in accordance with the CFL condition. The maximal time step
-        size is inversely propertional to the speed of light in the medium, and thus
-        propertional to the index of refraction. However, for dispersive medium,
+        size is inversely proportional to the speed of light in the medium, and thus
+        proportional to the index of refraction. However, for dispersive medium,
         anisotropic medium, and other more complicated media, there are complications in
         deciding on the choice of the index of refraction.
 
